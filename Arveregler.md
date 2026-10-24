@@ -288,9 +288,12 @@ Formål: Hvor stor livsforsikring på A trengs for at B kan bli boende etter at 
 |---|---|---|
 | Bolig som skal beholdes (eiendeler av type bolig/fritidsbolig) | alle av type bolig | alle av type bolig |
 | Innfri gjeld (0–100 %, steg 5) | 100 % | 100 % |
-| Dekk barnas arv / arv som utbetales nå kontant (0–100 %) | 25 % | 100 % |
+| Dekk barnas arv / arv som utbetales nå kontant (0–100 %) | 100 % | 100 % |
 | Likviditetsbuffer (kr) | 500 000 | 500 000 |
+| Bruk likvide midler (0–100 %) | 100 % | 100 % |
 | Trekk fra eksisterende livsforsikring | på | på |
+
+Likvide eiendeler er bankinnskudd, aksjer/fond og investeringsselskap (eller eiendeler merket «likvid»). De kan selges i oppgjøret og brukes som kontanter – for eksempel til å betale arv til barn.
 
 ### 10.2 Beregning
 ```
@@ -299,10 +302,12 @@ Dtot     = total gjeld;   D = Dtot × innfri%
 barnNå   = Σ arv fra A's dødsbo til A's livsarvinger i alternativet (alt. 2: bare det som utbetales nå)
 barnDekk = barnNå × dekk%
 K        = D + barnDekk + buffer                          // kontantbehov
+L        = Σ likvide eiendeler;   Lq = L × bruk%
+Kn       = max(0, K − Lq)                                 // kontantbehov etter salg
 W        = B's formue etter oppgjøret = egen formue + arv (+ uskiftebo i alt. 2)
 reqNet   = V − (Dtot − D) + buffer                        // nødvendig egenkapital for å beholde boligen
 S        = max(0, reqNet − W)                             // boligunderskudd
-behov    = max(K, S)                                      // anbefalt forsikringssum
+behov    = max(Kn, S)                                     // anbefalt forsikringssum
 eksist   = (trekk fra) ? forsikring til B : 0
 udekket  = max(0, behov − eksist)
 ```
@@ -365,7 +370,9 @@ Livsforsikring mann 50 G, kone 20 G, begunstiget ektefelle. G = 124 028. Alt. 3 
 | 26 | Alt. 3 – minstearv | 496 112 |
 | 27 | Alt. 3 – fri del | 24 672 628 |
 
-Forsikringsbehov, kone dør, alt. 1, standard: K = 19 000 000 + 25 % × 25 312 500 + 500 000 = **25 828 125**. Eksisterende 2 480 560 → udekket **23 347 565** (≈ 188,2 G).
-Alt. 2: K = 19 000 000 + 100 % × 2 250 000 + 500 000 = **21 750 000** → udekket **19 269 440**.
+Forsikringsbehov, kone dør, alt. 1, standard: K = 19 000 000 + 100 % × 25 312 500 + 500 000 = **44 812 500**. Likvide midler (investeringsselskap + aksjer/fond + bank) = **50 500 000** → Kn = **0**. S = 0. Udekket behov **0**.
+Alt. 2: K = 19 000 000 + 100 % × 2 250 000 + 500 000 = **21 750 000** → Kn = **0**. Udekket **0**.
+
+Uten likvide midler (bruk% = 0) er udekket alt. 1 **23 347 565** og alt. 2 **19 269 440**.
 
 Toleranse: |forventet − beregnet| < 1 kr.

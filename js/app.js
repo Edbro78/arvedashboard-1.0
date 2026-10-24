@@ -14,12 +14,12 @@
   ];
   const TAB_IDS = TABS.map(t => t.id);
   const ALT_IDX = { lov: 0, uskifte: 1, minimum: 2, testament: 3 };
-  const TYPES = [['hus', 'Bolig'], ['fritid', 'Fritidsbolig'], ['bil', 'Bil/båt'], ['innbo', 'Innbo'], ['annet', 'Annen formue']];
+  const TYPES = [['hus', 'Bolig'], ['fritid', 'Fritidsbolig'], ['bil', 'Bil/båt'], ['innbo', 'Innbo'], ['bank', 'Bankinnskudd'], ['fond', 'Aksjer/fond'], ['selskap', 'Investeringsselskap'], ['annet', 'Annen formue']];
   const BANNER_ICON = { error: 'bx-error-circle', warn: 'bx-error', info: 'bx-info-circle', success: 'bx-check-circle' };
 
   const root = document.getElementById('app');
   const tipEl = document.getElementById('tip');
-  const ui = { tab: 'forside', open: {}, showCalc: true, modal: false };
+  const ui = { tab: 'forside', open: {}, showCalc: true, modal: false, balAlt: 'lov' };
   let input, R, VAL = null, timer = null;
 
   /* ================= State ================= */
@@ -29,7 +29,13 @@
     const o = Object.assign({}, base, inp || {});
     const n = (inp && inp.insNeed) || {};
     o.insNeed = { lov: Object.assign({}, base.insNeed.lov, n.lov || {}), uskifte: Object.assign({}, base.insNeed.uskifte, n.uskifte || {}) };
+    if (!n.lovDefaultsV2 && (n.lov || {}).kidsPct === 25) o.insNeed.lov.kidsPct = 100;
+    o.insNeed.lovDefaultsV2 = true;
     if (!Array.isArray(o.assets)) o.assets = base.assets;
+    o.assets.forEach(a => {
+      const t = E.inferLiquidType(a.name);
+      if (t && (a.type === 'annet' || E.LIQUID.includes(a.type))) a.type = t;
+    });
     o.consent = o.consent || {}; o.testament = o.testament || {};
     delete o.knew;
     return o;
@@ -55,6 +61,18 @@
   function afterSet(path) {
     if (['civil', 'sambFelles', 'nFelles', 'nSkM', 'nSkK'].includes(path)) input.testament = {};
     if ((path === 'civil' || path === 'sambFelles') && input.civil === 'samboer' && input.sambFelles) input.nFelles = Math.max(1, input.nFelles | 0);
+    const am = path.match(/^assets\.(\d+)\.(name|type)$/);
+    if (am) {
+      const a = input.assets[+am[1]];
+      if (am[2] === 'name') {
+        const t = E.inferLiquidType(a.name);
+        if (t && (a.type === 'annet' || E.LIQUID.includes(a.type))) a.type = t;
+      }
+      if (am[2] === 'type') {
+        if (E.LIQUID.includes(a.type)) { if (a.liquid === false) delete a.liquid; }
+        else if (a.liquid === true && !E.inferLiquidType(a.name)) a.liquid = false;
+      }
+    }
   }
   function setTestament(id, v) {
     const A = R.A;
@@ -248,7 +266,8 @@
       ['bx-shield-quarter', 'Minstearv', 'Ektefellen arver minst 4 G med barn og 6 G uten. Samboer med felles barn: 4 G.', '4 G / 6 G'],
       ['bx-git-branch', 'Uskifte', 'Gjenlevende overtar felleseiet udelt og rår over det så lenge hun eller han lever.', ''],
       ['bx-slider-alt', 'Fri kvote', 'Den delen av boet som kan testamenteres fritt når pliktdel og ektefellens arv er sikret.', ''],
-      ['bx-group', 'Livsforsikring', 'Utbetales direkte til begunstiget og går utenom dødsboet.', '']
+      ['bx-group', 'Livsforsikring', 'Utbetales direkte til begunstiget og går utenom dødsboet.', ''],
+      ['bx-coin-stack', 'Likvide midler', 'Bank, fond og investeringsselskap kan selges i oppgjøret og brukes til å betale gjeld og arv.', '']
     ];
     const gloss = `<section class="card" data-key="fp-terms"><div class="fp-sec-h" style="margin-bottom:24px"><div class="eyebrow">BEGREPER</div><h3 class="h2-xs">Det viktigste å kjenne til</h3></div>
       <div class="fp-terms">${terms.map(t => `<div class="fp-term"><span class="icirc"><i class="bx ${t[0]}" aria-hidden="true"></i></span>
@@ -330,7 +349,8 @@
   function inputTab() {
     return `<div class="panel-h" data-key="ih"><div><h2 class="h2-xs">Familie og formue</h2><p class="muted">Alle felt kan redigeres. Beregningen oppdateres fortløpende i de fire alternativene.</p></div>
       <button type="button" class="btn btn-tertiary btn-sm" data-action="reset"><i class="bx bx-reset" aria-hidden="true"></i>Tilbakestill til testcase</button></div>
-      <div class="grid-in" data-key="grid">${familyCard()}${assetsCard()}${debtCard()}${saereieCard()}${insCard()}${paramCard()}</div>`;
+      <div class="grid-in" data-key="grid">${familyCard()}${assetsCard()}${debtCard()}${saereieCard()}${insCard()}${paramCard()}</div>
+      ${holdingsCard()}`;
   }
 
   function familyCard() {
@@ -369,20 +389,25 @@
       if (R.gift) {
         const own = [['felles', 'Felleseie'], ['sM', `Særeie ${nm.M}`], ['sK', `Særeie ${nm.K}`]];
         meta += `<select class="sel sm" data-bind="assets.${ix}.own" aria-label="Eierskap">${own.map(o => `<option value="${o[0]}"${(a.own || 'felles') === o[0] ? ' selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`;
-      } else if (R.samb) {
+      } else       if (R.samb) {
         const p = Math.min(100, Math.max(0, +a.pctM || 0));
         meta += `<span class="pctin">Eierandel ${esc(nm.M)} <input class="inp sm" type="text" inputmode="decimal" data-bind="assets.${ix}.pctM" data-type="dec" value="${F.dec(p, 1)}" aria-label="Eierandel ${esc(nm.M)} i prosent"> % · ${esc(nm.K)} ${F.pct(100 - p)}</span>`;
       }
-      return `<div class="asset" data-key="asset-${esc(a.id)}">
+      const liq = E.isLiquid(a);
+      meta += `<button type="button" class="chip ${liq ? 'on liq' : ''}" aria-pressed="${liq}" data-action="toggleLiq" data-ix="${ix}" title="${liq ? 'Trekkes fra forsikringsbehovet. Kan slås av.' : 'Merk som likvid – kan selges i oppgjøret.'}">
+        <i class="bx ${liq ? 'bx-check' : 'bx-plus'}" aria-hidden="true"></i>${liq ? 'Likvid – kan brukes i oppgjøret' : 'Merk som likvid'}</button>`;
+      return `<div class="asset${liq ? ' is-liq' : ''}" data-key="asset-${esc(a.id)}">
         <div class="asset-top"><input class="inp" type="text" data-bind="assets.${ix}.name" data-type="text" value="${esc(a.name)}" aria-label="Navn på eiendel" autocomplete="off">
         ${moneyInput(`assets.${ix}.value`, a.value, `Verdi, ${a.name}`)}
         <button type="button" class="icon-btn ghost del" data-action="delAsset" data-id="${esc(a.id)}" aria-label="Slett ${esc(a.name)}"><i class="bx bx-trash" aria-hidden="true"></i></button></div>
         <div class="asset-meta">${meta}</div></div>`;
     }).join('');
+    const liqSum = input.assets.filter(E.isLiquid).reduce((s, a) => s + (+a.value || 0), 0);
     const body = `<div class="assets">${rows}</div>
       <div class="sumline"><button type="button" class="btn btn-tertiary btn-sm" data-action="addAsset"><i class="bx bx-plus" aria-hidden="true"></i>Legg til eiendel</button>
-      <div class="tot"><span>Sum bruttoformue</span>${kr(R.est.brutto)}</div></div>`;
-    return ccard('eiendeler', 'bx-building-house', 'Eiendeler', `Bruttoformue ${kr(R.est.brutto)}`, body);
+      <div class="tot"><span>Sum bruttoformue</span>${kr(R.est.brutto)}</div></div>
+      ${liqSum > 0 ? `<p class="help">Likvide eiendeler ${kr(liqSum)} (bank, fond og investeringsselskap) kan selges i oppgjøret – for eksempel for å betale arv til barn – og reduserer behovet for livsforsikring.</p>` : ''}`;
+    return ccard('eiendeler', 'bx-building-house', 'Eiendeler', `Bruttoformue ${kr(R.est.brutto)}${liqSum > 0 ? ` · likvid ${kr(liqSum)}` : ''}`, body);
   }
 
   function debtCard() {
@@ -434,6 +459,55 @@
         <div class="r"><i class="bx bx-lock-alt" aria-hidden="true"></i>Samboers minstearv (felles barn)<b>4 G = ${kr(R.g4)}</b></div>
       </div>`;
     return ccard('parametere', 'bx-slider-alt', 'Parametere', `1 G = ${kr(R.G)}`, body);
+  }
+
+  function holdingsCard() {
+    if (R.enslig) return '';
+    const avail = R.alts.filter(a => a.available && a.balance);
+    if (!avail.length) return '';
+    if (!avail.some(a => a.id === ui.balAlt)) ui.balAlt = avail[0].id;
+    const alt = avail.find(a => a.id === ui.balAlt) || avail[0];
+    const b = alt.balance;
+    const holdColor = C.HOLD_COLOR || {};
+    const row = (it, neg) => {
+      const fill = it.type === 'ins' ? '' : (holdColor[it.type] || '#8091AC');
+      return `<div class="hold-row ${neg ? 'neg' : ''}"><span class="sq ${it.type === 'ins' ? 'hatch-ins' : ''}"${fill ? ` style="background:${fill}"` : ''}></span>
+        <span class="n">${esc(it.name)}</span><b>${neg ? '− ' : ''}${kr(it.value)}</b></div>`;
+    };
+    const segs = [
+      ['bank', 'Kontanter / bank', b.cash],
+      ['fond', 'Fond og selskap', b.funds],
+      ['hus', 'Bolig og eiendeler', b.real + b.other],
+      ['debt', 'Gjeld', b.debtLeft],
+      ['kids', 'Gjenstående arv til barn', b.unpaid]
+    ].filter(x => x[2] > 0.5);
+    const usedTxt = b.used.liquid > 0.5
+      ? `${list(b.liqNames)} er brukt med ${kr(b.used.liquid)} i oppgjøret: ${kr(b.used.debt)} til gjeld og ${kr(b.used.kids)} til barn.`
+      : (b.liqNames.length ? `${list(b.liqNames)} er likvide, men ble ikke trukket i dette alternativet.` : 'Ingen likvide eiendeler er merket.');
+    return `<section class="card hold-card" data-key="holdings">
+      <div class="card-h"><div style="display:flex;gap:14px;align-items:flex-start">
+        <span class="icirc"><i class="bx bx-pie-chart-alt-2" aria-hidden="true"></i></span>
+        <div><h3 class="h3">Hva ${esc(R.nB)} sitter igjen med</h3>
+          <p class="muted" style="max-width:720px">Sammensetningen etter at ${esc(R.nA)} er død og oppgjøret er gjort med likvide midler. ${esc(usedTxt)}</p></div></div></div>
+      <div class="hold-toolbar"><div class="seg" role="radiogroup" aria-label="Alternativ for oppgjøret">${avail.map(a =>
+        `<button type="button" role="radio" aria-checked="${a.id === ui.balAlt}" class="${a.id === ui.balAlt ? 'on' : ''}" data-action="balAlt" data-id="${a.id}">${a.num} ${esc(a.title)}</button>`
+      ).join('')}</div></div>
+      <div class="hold-body">
+        <div class="hold-viz">
+          <div class="hold-kpi"><span class="flabel">${esc(R.nB)} netto etter oppgjøret</span><div class="need-big">${kr(b.net)}</div>
+            <div class="help">${esc(alt.title)} · eiendeler ${kr(b.gross)}${b.owe > 0.5 ? ` − forpliktelser ${kr(b.owe)}` : ''}</div></div>
+          ${C.holdings(b, `${R.nB} etter oppgjøret, netto ${kr(b.net)}`)}
+          <div class="hold-cap"><span>Beholder</span>${b.liab.length ? '<span class="out">Forpliktelser</span>' : ''}</div>
+          <div class="hold-pills">${segs.map(s => `<span><span class="sq ${s[0] === 'ins' ? 'hatch-ins' : ''}" style="background:${holdColor[s[0]] || '#8091AC'}"></span>${esc(s[1])} ${F.short(s[2])}</span>`).join('')}</div>
+        </div>
+        <div class="hold-list">
+          <div class="flabel">Eiendeler etter salg</div>
+          ${b.keep.map(it => row(it, false)).join('')}
+          ${b.liab.length ? `<div class="flabel" style="margin-top:16px">Forpliktelser</div>${b.liab.map(it => row(it, true)).join('')}` : ''}
+          <div class="hold-row total"><span class="n">Netto til ${esc(R.nB)}</span><b>${kr(b.net)}</b></div>
+        </div>
+      </div>
+    </section>`;
   }
 
   /* ---------- Alternativ 1–4 ---------- */
@@ -560,13 +634,16 @@
       ${slider(`insNeed.${key}.debtPct`, p.debtPct, 'Innfri gjeld', `${F.pct(p.debtPct, 0)} · ${kr(n.D)}`, `Total gjeld ${kr(n.Dtot)}.`)}
       ${slider(`insNeed.${key}.kidsPct`, p.kidsPct, kidsLabel, `${F.pct(p.kidsPct, 0)} · ${kr(n.kidsCover)}`, usk ? `Arv som utbetales nå til barna: ${kr(n.kidsNow)}.` : `Barnas arv fra dødsboet: ${kr(n.kidsNow)}.`)}
       ${moneyField('Likviditetsbuffer', `insNeed.${key}.buffer`, p.buffer)}
+      ${slider(`insNeed.${key}.liqPct`, p.liqPct, 'Bruk likvide midler i oppgjøret', `${F.pct(p.liqPct, 0)} · ${kr(n.Lq)}`,
+        n.L > 0 ? `${list(n.liqNames)} kan ${esc(R.nB)} selge for å betale gjeld og arv, og regnes nesten som kontanter: ${kr(n.L)}.` : 'Merk bank, fond eller investeringsselskap som likvide under Familie og formue.')}
       <div class="swlist">${sw(`insNeed.${key}.useExisting`, !!p.useExisting, 'Trekk fra eksisterende livsforsikring', `Livsforsikring til ${R.nB}: ${kr(a.survivor.ins)}.`)}</div>`;
     const exW = n.need > 0 ? Math.min(n.existing, n.need) / n.need * 100 : 0;
     const gapW = n.need > 0 ? n.gap / n.need * 100 : 0;
-    const extra = Math.max(0, n.S - n.K);
+    const extra = Math.max(0, n.S - n.Kn);
     const names = list(n.keepNames);
+    const liqNote = n.Lq > 0.5 && n.Kn <= 0.5 ? ` Likvide midler (${list(n.liqNames)}, ${kr(n.Lq)}) dekker kontantbehovet på ${kr(n.K)}.` : '';
     const status = !n.keepIds.length ? banner('info', 'Ingen bolig er valgt. Behovet beregnes ut fra kontantbehovet alene.')
-      : n.canStay ? banner('success', `${R.nB} kan bli boende i ${names} (${kr(n.V)}). ${gen(R.nB)} formue etter oppgjøret er ${kr(n.W)}, mot nødvendig egenkapital ${kr(n.reqNet)}.`)
+      : n.canStay ? banner('success', `${R.nB} kan bli boende i ${names} (${kr(n.V)}). ${gen(R.nB)} formue etter oppgjøret er ${kr(n.W)}, mot nødvendig egenkapital ${kr(n.reqNet)}.${liqNote}`)
         : banner('error', `Uten forsikring mangler ${R.nB} ${kr(n.S)} for å bli boende i ${names} (${kr(n.V)}). ${gen(R.nB)} formue etter oppgjøret er ${kr(n.W)}, mot nødvendig egenkapital ${kr(n.reqNet)}.`);
     const right = `<div><span class="flabel">Udekket forsikringsbehov på ${esc(gen(R.nA))} liv</span><div class="need-big">${kr(n.gap)}</div>
         <div class="help">${esc(F.g(n.gapG))} · samlet behov ${kr(n.need)}</div></div>
@@ -576,6 +653,8 @@
         <div class="r"><span>${usk ? 'Arv som utbetales nå' : 'Barnas arv'} (${F.pct(p.kidsPct, 0)})</span><b>${kr(n.kidsCover)}</b></div>
         <div class="r"><span>Likviditetsbuffer</span><b>${kr(n.buf)}</b></div>
         <div class="r sub"><span>= Kontantbehov</span><b>${kr(n.K)}</b></div>
+        <div class="r"><span>− Likvide midler (${F.pct(p.liqPct, 0)})</span><b>${kr(Math.min(n.Lq, n.K))}</b></div>
+        <div class="r sub"><span>= Kontantbehov etter salg av likvide midler</span><b>${kr(n.Kn)}</b></div>
         ${extra > 0.5 ? `<div class="r neg"><span>+ Tillegg for å beholde bolig</span><b>${kr(extra)}</b></div>` : ''}
         <div class="r sub"><span>Anbefalt forsikringssum</span><b>${kr(n.need)}</b></div>
         <div class="r"><span>− Eksisterende forsikring</span><b>${kr(n.existing)}</b></div>
@@ -583,7 +662,7 @@
       </div>${status}`;
     return `<section class="card" data-key="need"><div class="card-h"><div style="display:flex;gap:14px;align-items:flex-start">
         <span class="icirc hatch-ins"><i class="bx bx-shield-quarter" aria-hidden="true"></i></span>
-        <div><h3 class="h3">Forsikringsbehov ved ${esc(gen(R.nA))} død</h3><p class="muted" style="max-width:720px">Hvor stor livsforsikring på ${esc(R.nA)} som trengs for at ${esc(R.nB)} kan bli boende etter at barna har fått sitt. Forsikringen går utenom dødsboet og endrer ikke arven.</p></div></div></div>
+        <div><h3 class="h3">Forsikringsbehov ved ${esc(gen(R.nA))} død</h3><p class="muted" style="max-width:720px">Hvor stor livsforsikring på ${esc(R.nA)} som trengs for at ${esc(R.nB)} kan bli boende etter at barna har fått sitt. Bank, fond og investeringsselskap kan selges i oppgjøret og trekkes fra kontantbehovet. Forsikringen går utenom dødsboet og endrer ikke arven.</p></div></div></div>
       <div class="need"><div class="need-l">${left}</div><div class="need-r">${right}</div></div></section>`;
   }
 
@@ -703,6 +782,13 @@
     tab: el => setTab(el.dataset.tab),
     set: el => { setP(el.dataset.bind, JSON.parse(el.dataset.value)); afterSet(el.dataset.bind); render(); },
     toggle: el => { setP(el.dataset.bind, !getP(el.dataset.bind)); render(); },
+    toggleLiq: el => {
+      const a = input.assets[+el.dataset.ix];
+      if (!a) return;
+      a.liquid = !E.isLiquid(a);
+      render();
+    },
+    balAlt: el => { ui.balAlt = el.dataset.id; render(); },
     step: el => {
       const b = el.dataset.bind, min = +(el.dataset.min || 0);
       setP(b, Math.max(min, Math.min(8, (getP(b) | 0) + +el.dataset.delta)));
@@ -711,7 +797,7 @@
     toggleCard: el => { const id = el.dataset.id; ui.open[id] = ui.open[id] === false; render(); },
     addAsset: () => {
       const id = 'a' + Date.now().toString(36);
-      input.assets.push({ id, name: 'Ny eiendel', type: 'annet', value: 0, own: 'felles', pctM: 50 });
+      input.assets.push({ id, name: 'Ny eiendel', type: 'annet', value: 0, own: 'felles', pctM: 50, liquid: false });
       render();
       const el = root.querySelector(`[data-key="asset-${id}"] input`); if (el) { el.focus(); el.select(); }
     },
@@ -768,13 +854,13 @@
     const el = ev.target, bind = el.dataset && el.dataset.bind;
     if (!bind || el.tagName === 'SELECT') return;
     const v = readValue(el);
-    if (bind.startsWith('T:')) setTestament(bind.slice(2), v); else setP(bind, v);
+    if (bind.startsWith('T:')) setTestament(bind.slice(2), v); else { setP(bind, v); afterSet(bind); }
     if (el.type === 'range') render(); else schedule(120);
   });
   root.addEventListener('change', ev => {
     const el = ev.target, bind = el.dataset && el.dataset.bind;
     if (!bind || el.tagName !== 'SELECT') return;
-    setP(bind, el.value); render();
+    setP(bind, el.value); afterSet(bind); render();
   });
   root.addEventListener('focusout', ev => {
     if (ev.target.dataset && ev.target.dataset.bind && ev.target.tagName === 'INPUT') setTimeout(render, 0);

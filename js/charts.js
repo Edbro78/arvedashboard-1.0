@@ -170,5 +170,29 @@
       </div>`).join('')}</div>`;
   }
 
-  window.Charts = { sankey, waterfall, compare, CMP_COLORS };
+  const HOLD_COLOR = {
+    hus: '#002359', fritid: '#264472', bil: '#405A82', innbo: '#667085',
+    selskap: '#3B7EE3', fond: '#84AEED', bank: '#B5CFF5', annet: '#8091AC',
+    ins: 'var(--hatch-ins)', debt: '#F04438', kids: '#9747FF'
+  };
+  function holdFill(type) { return HOLD_COLOR[type] || HOLD_COLOR.annet; }
+
+  /**
+   * Gjenlevendes balanse etter oppgjør. bal = alt.balance
+   */
+  function holdings(bal, ariaLabel) {
+    if (!bal) return '';
+    const max = Math.max(bal.gross, bal.owe, 1);
+    const stack = (items, cls) => {
+      if (!items.length) return `<div class="${cls} empty">Ingen</div>`;
+      return `<div class="${cls}" role="img" aria-label="${esc(ariaLabel)}">${items.map(it => {
+        const w = Math.max(1.2, it.value / max * 100);
+        const fill = holdFill(it.type);
+        return `<div class="hold-seg${it.type === 'ins' ? ' hatch-ins' : ''}" style="flex:${r2(it.value)} 1 0;min-width:${r2(w * 0.4)}%${it.type === 'ins' ? '' : `;background:${fill}`}" title="${esc(it.name + ': ' + kr(it.value))}"></div>`;
+      }).join('')}</div>`;
+    };
+    return `<div class="hold">${stack(bal.keep, 'hold-bar keep')}${bal.liab.length ? stack(bal.liab, 'hold-bar out') : ''}</div>`;
+  }
+
+  window.Charts = { sankey, waterfall, compare, holdings, HOLD_COLOR, CMP_COLORS };
 })();

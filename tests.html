@@ -33,10 +33,13 @@
       const rows = E.validate();
       const K = E.compute(E.clone(E.DEFAULT_INPUT));
       const need = [
-        ['Kone dør · alt. 1 · kontantbehov', 25828125, K.alts[0].need.K],
-        ['Kone dør · alt. 1 · udekket behov', 23347565, K.alts[0].need.gap],
+        ['Kone dør · alt. 1 · kontantbehov', 44812500, K.alts[0].need.K],
+        ['Kone dør · alt. 1 · likvide midler', 50500000, K.alts[0].need.L],
+        ['Kone dør · alt. 1 · etter likvid', 0, K.alts[0].need.Kn],
+        ['Kone dør · alt. 1 · udekket behov', 0, K.alts[0].need.gap],
         ['Kone dør · alt. 2 · kontantbehov', 21750000, K.alts[1].need.K],
-        ['Kone dør · alt. 2 · udekket behov', 19269440, K.alts[1].need.gap]
+        ['Kone dør · alt. 2 · udekket behov', 0, K.alts[1].need.gap],
+        ['Kone dør · alt. 1 · gjenlevende netto', 41668060, K.alts[0].balance.net]
       ].map(([label, exp, act]) => ({ label, exp, act, ok: Math.abs(exp - act) < 1 }));
       const st = ok => ok ? '<span class="ok">Stemmer</span>' : '<span class="bad">Avvik</span>';
       document.getElementById('rows').innerHTML = rows.map((r, i) => `<tr class="${r.ok ? '' : 'fail'}"><td>${i + 1}</td><td>${F.esc(r.label)}</td><td class="r">${F.kr(r.exp)}</td><td class="r amt">${F.kr(r.act)}</td><td class="r">${F.kr(r.act - r.exp)}</td><td>${st(r.ok)}</td></tr>`).join('');

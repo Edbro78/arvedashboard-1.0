@@ -12,18 +12,32 @@
       { id: 'a1', name: 'Hus', type: 'hus', value: 25000000, own: 'felles', pctM: 50 },
       { id: 'a2', name: 'Fritidseiendom', type: 'fritid', value: 5000000, own: 'felles', pctM: 50 },
       { id: 'a3', name: 'Bil/båt', type: 'bil', value: 3000000, own: 'felles', pctM: 50 },
-      { id: 'a4', name: 'Investeringsselskap', type: 'annet', value: 36000000, own: 'felles', pctM: 50 },
-      { id: 'a5', name: 'Aksjer/fond', type: 'annet', value: 14000000, own: 'felles', pctM: 50 },
-      { id: 'a6', name: 'Bank', type: 'annet', value: 500000, own: 'felles', pctM: 50 }
+      { id: 'a4', name: 'Investeringsselskap', type: 'selskap', value: 36000000, own: 'felles', pctM: 50, liquid: true },
+      { id: 'a5', name: 'Aksjer/fond', type: 'fond', value: 14000000, own: 'felles', pctM: 50, liquid: true },
+      { id: 'a6', name: 'Bank', type: 'bank', value: 500000, own: 'felles', pctM: 50, liquid: true }
     ],
     debtF: 19000000, debtM: 0, debtK: 0,
     saereieM: 0, saereieK: 3000000, skjevM: 0, skjevK: 0,
     insGM: 50, insGK: 20, benM: 'spouse', benK: 'spouse', benNameM: '', benNameK: '',
     G: 124028,
     uskSaereieInn: false, consent: {}, friTo: 'O', parentsAlive: true,
-    insNeed: { lov: { keep: null, debtPct: 100, kidsPct: 25, buffer: 500000, useExisting: true }, uskifte: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, useExisting: true } },
+    insNeed: { lov: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, liqPct: 100, useExisting: true }, uskifte: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, liqPct: 100, useExisting: true } },
     testament: {}, testamentNote: ''
   };
+  const LIQUID = ['bank', 'fond', 'selskap'];
+  function inferLiquidType(name) {
+    const n = (name || '').trim();
+    if (/investeringsselskap|holding/i.test(n)) return 'selskap';
+    if (/aksje|fond|verdipapir/i.test(n)) return 'fond';
+    if (/innskudd|bankkonto|sparekonto/i.test(n) || /^bank\b/i.test(n)) return 'bank';
+    return null;
+  }
+  function isLiquid(a) {
+    if (!a) return false;
+    if (a.liquid === true) return true;
+    if (a.liquid === false) return false;
+    return LIQUID.includes(a.type) || !!inferLiquidType(a.name);
+  }
   const clone = o => JSON.parse(JSON.stringify(o));
   const sum = a => a.reduce((s, x) => s + (+x || 0), 0);
   const range = n => Array.from({ length: Math.max(0, n | 0) }, (_, i) => i);
@@ -338,7 +352,7 @@
     const heirIds = heirs.map(h => h.id);
     function needFor(alt) {
       if (!alt.available || enslig) return null;
-      const p = Object.assign({ keep: null, debtPct: 100, kidsPct: alt.id === 'uskifte' ? 100 : 25, buffer: 0, useExisting: true }, ((inp.insNeed || {})[alt.id]) || {});
+      const p = Object.assign({ keep: null, debtPct: 100, kidsPct: 100, buffer: 0, liqPct: 100, useExisting: true }, ((inp.insNeed || {})[alt.id]) || {});
       const keepIds = p.keep || (inp.assets || []).filter(a => a.type === 'hus').map(a => a.id);
       const keepAssets = (inp.assets || []).filter(a => keepIds.includes(a.id));
       const V = sum(keepAssets.map(a => a.value));
@@ -347,16 +361,67 @@
       const kidsCover = kidsNow * Math.min(100, Math.max(0, +p.kidsPct || 0)) / 100;
       const buf = Math.max(0, +p.buffer || 0);
       const K = D + kidsCover + buf;
+      const liqAssets = (inp.assets || []).filter(a => isLiquid(a) && (+a.value || 0) > 0);
+      const L = sum(liqAssets.map(a => a.value));
+      const Lq = L * Math.min(100, Math.max(0, p.liqPct == null ? 100 : +p.liqPct || 0)) / 100;
+      const Kn = Math.max(0, K - Lq);
       const sv = alt.survivor;
       const W = sv.own + sv.arv + (sv.usk || 0);
       const reqNet = V - (Dtot - D) + buf;
       const S = Math.max(0, reqNet - W);
-      const need = Math.max(K, S);
+      const need = Math.max(Kn, S);
       const existing = p.useExisting ? sv.ins : 0;
       const gap = Math.max(0, need - existing);
-      return { p, keepIds, keepNames: keepAssets.map(a => a.name), V, Dtot, D, kidsNow, kidsCover, buf, K, W, reqNet, S, need, existing, gap, needG: G ? need / G : 0, gapG: G ? gap / G : 0, canStay: S <= 0.5 };
+      return { p, keepIds, keepNames: keepAssets.map(a => a.name), V, Dtot, D, kidsNow, kidsCover, buf, K, liqNames: liqAssets.map(a => a.name), L, Lq, Kn, W, reqNet, S, need, existing, gap, needG: G ? need / G : 0, gapG: G ? gap / G : 0, canStay: S <= 0.5 };
     }
     a1.need = needFor(a1); a2.need = needFor(a2);
+
+    function balanceFor(alt) {
+      if (!alt.available || enslig) return null;
+      const sliderKey = alt.id === 'uskifte' ? 'uskifte' : 'lov';
+      const p = Object.assign(
+        { debtPct: 100, kidsPct: 100, buffer: 0, liqPct: 100, useExisting: true },
+        ((inp.insNeed || {})[sliderKey]) || {}
+      );
+      if (alt.id !== 'lov' && alt.id !== 'uskifte') { p.debtPct = 100; p.kidsPct = 100; p.liqPct = 100; }
+      const kidsNow = sum(alt.flows.filter(f => f.from === 'A' && heirIds.includes(f.to)).map(f => f.value));
+      const Dtot = est.debtTot;
+      const D = Dtot * Math.min(100, Math.max(0, +p.debtPct || 0)) / 100;
+      const kidsCover = kidsNow * Math.min(100, Math.max(0, +p.kidsPct || 0)) / 100;
+      const cashOut = D + kidsCover;
+      const assets = (inp.assets || []).filter(a => (+a.value || 0) > 0.5);
+      const liqAssets = assets.filter(isLiquid);
+      const L = sum(liqAssets.map(a => a.value));
+      const liqShare = Math.min(100, Math.max(0, p.liqPct == null ? 100 : +p.liqPct || 0)) / 100;
+      const Lq = L * liqShare;
+      const used = Math.min(Lq, cashOut);
+      const keep = [];
+      assets.forEach(a => {
+        const v = +a.value || 0;
+        let left = v;
+        if (isLiquid(a) && Lq > 0.5) left = Math.max(0, v - v * liqShare * (used / Lq));
+        if (left > 0.5) keep.push({ id: a.id, name: a.name, type: a.type || 'annet', value: left, liquid: isLiquid(a) });
+      });
+      const ins = p.useExisting !== false ? (alt.survivor.ins || 0) : 0;
+      if (ins > 0.5) keep.push({ id: 'ins', name: 'Livsforsikring', type: 'ins', value: ins, liquid: true });
+      const debtLeft = Math.max(0, Dtot - D);
+      const unpaid = Math.max(0, kidsNow - kidsCover);
+      const liab = [];
+      if (debtLeft > 0.5) liab.push({ id: 'debt', name: 'Gjenstående gjeld', type: 'debt', value: debtLeft });
+      if (unpaid > 0.5) liab.push({ id: 'kids', name: 'Gjenstående arv til barn', type: 'kids', value: unpaid });
+      const cash = sum(keep.filter(x => x.type === 'bank' || x.type === 'ins').map(x => x.value));
+      const funds = sum(keep.filter(x => x.type === 'fond' || x.type === 'selskap').map(x => x.value));
+      const real = sum(keep.filter(x => ['hus', 'fritid', 'bil', 'innbo'].includes(x.type)).map(x => x.value));
+      const other = sum(keep.filter(x => !['bank', 'ins', 'fond', 'selskap', 'hus', 'fritid', 'bil', 'innbo'].includes(x.type)).map(x => x.value));
+      const gross = sum(keep.map(x => x.value));
+      const owe = sum(liab.map(x => x.value));
+      return {
+        p, keep, liab, used: { debt: D, kids: kidsCover, liquid: used },
+        L, Lq, kidsNow, Dtot, debtLeft, unpaid, cash, funds, real, other,
+        gross, owe, net: gross - owe, liqNames: liqAssets.map(a => a.name)
+      };
+    }
+    [a1, a2, a3, a4].forEach(a => { a.balance = balanceFor(a); });
 
     return { G, g4, g6, g15, A, B, nA, nB, nm, gift, samb, sambF, enslig, felles, skA, skB, heirs, nodes, est, bo, bOwn, insA, insB, insGA, insolvent, L, pl, alts: [a1, a2, a3, a4], t4, testament: t, PAL };
   }
@@ -410,5 +475,5 @@
     return rows;
   }
 
-  window.ArveEngine = { DEFAULT_INPUT, compute, lov, estate, validate, defaultTestament, fmt, kr, pct, gen, clone, PAL };
+  window.ArveEngine = { DEFAULT_INPUT, compute, lov, estate, validate, defaultTestament, fmt, kr, pct, gen, clone, PAL, LIQUID, isLiquid, inferLiquidType };
 })();
