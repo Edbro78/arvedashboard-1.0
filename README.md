@@ -14,6 +14,6 @@ Interaktiv arvekalkulator på norsk bokmål i designsystemet til Söderberg & Pa
 | `js/app.js` | State, rendering og hendelser |
 | `css/tokens.css`, `css/app.css` | Designtokens og komponenter |
 | `docs/Arveregler.md` | Juridiske regler og fasit |
-| `SPWM mal/` | Designsystemet (uten lisensierte fonter) |
+| `SPWM mal/` | Designsystemet med logoer og fonter |
 
 Forenklet modell til illustrasjon. Ikke juridisk rådgivning. Arveoppgjør bør gjennomgås med advokat.
