@@ -17,7 +17,7 @@ Rettsgrunnlag:
 |---|---|
 | **A** | Førstavdøde (den som dør først) |
 | **B** | Gjenlevende ektefelle/samboer |
-| **G** | Folketrygdens grunnbeløp. Standard 124 028 kr. Justeres 1. mai hvert år. |
+| **G** | Folketrygdens grunnbeløp. Standard 136 549 kr (1. mai 2026). Justeres 1. mai hvert år. |
 | **4 G** | Minstearv for ektefelle med livsarvinger, og for samboer med felles barn |
 | **6 G** | Minstearv for ektefelle uten livsarvinger (når foreldrelinjen lever) |
 | **15 G** | Øvre grense for pliktdelsarv per barn |
@@ -235,6 +235,7 @@ pliktdeler = se § 4 (med eventuell forholdsmessig reduksjon)
 friDel    = dødsbo − ektefelle − Σ pliktdeler
 ```
 Mottaker av fri del (valg): `Andre/veldedighet` (**standard**) | `Gjenlevende` | `Barna likt`.
+«Annen» gir familien bare lovens minimum og resten til annen mottaker.
 Fri del vises som eget skravert segment.
 
 ---
@@ -244,7 +245,7 @@ Fri del vises som eget skravert segment.
 Brukeren fordeler dødsboet i % til: gjenlevende, hvert barn individuelt og "Andre/veldedighet".
 
 ### 9.1 Standardfordeling (må alltid være lovlig)
-- Gift/samboer: hvert barn = pliktdel / dødsbo (rundet **opp** til 2 desimaler), gjenlevende = resten, andre = 0.
+- Gift/samboer: **lovens fordeling** omregnet til prosent (gjenlevende typisk ¼, barna deler resten). Andelene rundes til 2 desimaler, summeres til **100 %**, og ligger minst på pliktdel og minstearv.
 - Enslig med barn: likt mellom barna (rundet ned), rest til andre.
 - Enslig uten barn: 100 % til andre.
 - Knapp: "Tilbakestill til lovlig fordeling".
@@ -336,7 +337,7 @@ Status: `S = 0` → grønn "B kan bli boende i [bolig] (V kr). B's formue etter 
 **Input:** Gift. 2 felles barn. Mann 1 særkullsbarn, kone 0.
 Hus 25 000 000 · Fritidseiendom 5 000 000 · Bil/båt 3 000 000 · Investeringsselskap 36 000 000 · Aksjer/fond 14 000 000 · Bank 500 000 → brutto 83 500 000.
 Gjeld 19 000 000 (felles). Netto 64 500 000. Særeie kone 3 000 000 (oppgitt som sum), mann 0. Skjevdeling 0.
-Livsforsikring mann 50 G, kone 20 G, begunstiget ektefelle. G = 124 028. Alt. 3 med fri del → gjenlevende.
+Livsforsikring mann 50 G, kone 20 G, begunstiget ektefelle. G = 124 028 (fasit for kontrolltall; standard i appen er 136 549 fra 1. mai 2026). Alt. 3 med fri del → gjenlevende.
 
 | # | Kontroll | Forventet |
 |---|---|---|

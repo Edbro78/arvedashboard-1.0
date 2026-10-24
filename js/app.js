@@ -19,7 +19,7 @@
 
   const root = document.getElementById('app');
   const tipEl = document.getElementById('tip');
-  const ui = { tab: 'forside', open: {}, showCalc: true, modal: false, balAlt: 'lov' };
+  const ui = { tab: 'forside', open: {}, showCalc: true, modal: false, summary: false, copied: false, balAlt: 'lov' };
   let input, R, VAL = null, timer = null;
 
   /* ================= State ================= */
@@ -36,7 +36,11 @@
       const t = E.inferLiquidType(a.name);
       if (t && (a.type === 'annet' || E.LIQUID.includes(a.type))) a.type = t;
     });
-    o.consent = o.consent || {}; o.testament = o.testament || {};
+    if (o.G === 124028) o.G = 136549;
+    o.consent = o.consent || {};
+    if (!o.testamentLov) { o.testament = {}; o.testamentLov = true; }
+    else o.testament = o.testament || {};
+    if (o.friTo === 'max') o.friTo = 'O';
     delete o.knew;
     return o;
   }
@@ -161,7 +165,7 @@
   /* ================= Visninger ================= */
   function view() {
     return header() + hero() + kpis() + '<div id="tabs-anchor" data-key="anchor"></div>' + tabbar()
-      + `<main class="wrap main" id="main" data-key="main">${panel()}</main>` + footer() + (ui.modal ? modal() : '');
+      + `<main class="wrap main" id="main" data-key="main">${panel()}</main>` + footer() + (ui.modal ? modal() : '') + (ui.summary ? summaryOverlay() : '');
   }
 
   function header() {
@@ -202,12 +206,20 @@
     return id === 'uskifte' ? `${R.nB} rår over ${F.short(a.survivor.total)} kr` : `${R.nB} totalt ${F.short(a.survivor.total)} kr`;
   }
   function tabbar() {
-    return `<nav class="tabbar" data-key="tabbar" aria-label="Alternativer"><div class="wrap"><div class="tabs" role="tablist">${TABS.map(t => {
+    const btn = t => {
       const sel = t.id === ui.tab;
+      const alt = !!t.num;
       const na = ALT_IDX[t.id] != null && !R.alts[ALT_IDX[t.id]].available;
-      return `<button type="button" class="tab ${na ? 'na' : ''}" role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-action="tab" data-tab="${t.id}">
-        <span class="tab-l1">${t.num ? `<span class="tab-n">${t.num}</span>` : ''}${esc(t.label)}</span><span class="tab-l2">${esc(tabSub(t.id))}</span></button>`;
-    }).join('')}</div></div></nav>`;
+      return `<button type="button" class="tab${alt ? ` tab-alt alt-${t.num}` : ''}${na ? ' na' : ''}" role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-action="tab" data-tab="${t.id}">
+        <span class="tab-l1">${alt ? `<span class="tab-n">${t.num}</span>` : ''}${esc(t.label)}</span>${alt ? '' : `<span class="tab-l2">${esc(tabSub(t.id))}</span>`}</button>`;
+    };
+    const nav = t => !t.num;
+    const alts = TABS.filter(t => t.num);
+    return `<nav class="tabbar" data-key="tabbar" aria-label="Alternativer"><div class="wrap"><div class="tabs" role="tablist">
+      ${TABS.filter(t => nav(t) && t.id !== 'sammenligning').map(btn).join('')}
+      <div class="alt-group" role="presentation"><span class="alt-group-l">Fire alternativer</span>${alts.map(btn).join('')}</div>
+      ${btn(TABS.find(t => t.id === 'sammenligning'))}
+    </div></div></nav>`;
   }
 
   function panel() {
@@ -451,7 +463,7 @@
   }
 
   function paramCard() {
-    const body = `${moneyField('Grunnbeløp (1 G)', 'G', input.G, 'Grunnbeløpet justeres 1. mai hvert år – sjekk gjeldende G på nav.no.')}
+    const body = `${moneyField('Grunnbeløp (1 G)', 'G', input.G, '1 G er 136 549 kr per 1. mai 2026. Grunnbeløpet justeres 1. mai hvert år.')}
       <div class="locked">
         <div class="r"><i class="bx bx-lock-alt" aria-hidden="true"></i>Pliktdelsfaktor<b>15 G = ${kr(R.g15)}</b></div>
         <div class="r"><i class="bx bx-lock-alt" aria-hidden="true"></i>Ektefelles minstearv med livsarvinger<b>4 G = ${kr(R.g4)}</b></div>
@@ -554,10 +566,14 @@
     const opts = [{ v: 'S', l: R.nB }, ...(R.heirs.length ? [{ v: 'barna', l: 'Barna likt' }] : []), { v: 'O', l: 'Annen' }];
     let v = input.friTo || 'O';
     if (v === 'barna' && !R.heirs.length) v = 'S';
+    if (v === 'max') v = 'O';
+    const hint = v === 'O' ? `${R.nB} og barna får bare minstearv og pliktdel. Så mye som loven tillater går til annen mottaker.`
+      : v === 'barna' ? 'Den frie delen deles likt mellom barna, oppå pliktdelen.'
+      : `Den frie delen går til ${R.nB}, oppå minstearven.`;
     return `<section class="card" data-key="ctrl"><div class="ctrl-row">
       <div class="lockline"><i class="bx bx-lock-alt" aria-hidden="true"></i>Pliktdel og minstearv er låst til lovens minimum.</div>
       <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap"><span class="flabel">Fri del til</span>${seg('friTo', v, opts, '', 'Fri del til')}</div>
-    </div></section>`;
+    </div><p class="help" style="margin:12px 0 0">${esc(hint)}</p></section>`;
   }
 
   function testamentEditor() {
@@ -736,10 +752,125 @@
     })).filter(g => g.values.some(v => v != null && v > 0.5));
     const leg = ['1 Lov', '2 Uskifte', '3 Minimum', '4 Testament'].map((l, i) => `<span>${sq(C.CMP_COLORS[i])}${l}</span>`).join('');
     const usk = R.alts[1].available ? `<p class="help" style="margin-top:16px">I uskifte vises det som utbetales nå. Resten av arven etter ${esc(R.nA)} fordeles når ${esc(R.nB)} dør.</p>` : '';
-    return `<div class="panel-h" data-key="ch"><div><h2 class="h2">Sammenligning</h2><p class="muted">Hva hver mottaker sitter igjen med i de fire alternativene. For gjenlevende inkluderes egen formue og livsforsikring.</p></div></div>
+    return `<div class="panel-h" data-key="ch"><div><h2 class="h2">Sammenligning</h2><p class="muted">Hva hver mottaker sitter igjen med i de fire alternativene. For gjenlevende inkluderes egen formue og livsforsikring.</p></div>
+      <button type="button" class="btn btn-primary btn-md" data-action="openSummary"><i class="bx bx-file" aria-hidden="true"></i>Oppsummering</button></div>
       <div class="cmp-cards" data-key="cards">${cards}</div>
       <section class="card" data-key="per"><div class="card-h"><h3 class="h3">Per mottaker</h3><div class="legend">${leg}</div></div>
       ${groups.length ? C.compare(groups) : '<p class="help">Ingen fordeling å vise.</p>'}${usk}</section>`;
+  }
+
+  /* ---------- Oppsummering ---------- */
+  function flowTo(a, id) { return a.flows.filter(f => f.to === id && f.from !== 'B').reduce((s, f) => s + f.value, 0); }
+  function summaryPack() {
+    const civil = { gift: 'Gift', samboer: 'Samboer', enslig: 'Enslig' }[input.civil];
+    const nSk = (input.nSkM | 0) + (input.nSkK | 0);
+    const family = R.enslig
+      ? `${civil}. ${R.felles.length} barn.`
+      : `${civil}. ${R.nA} dør først, ${R.nB} er gjenlevende. ${R.felles.length} felles barn${nSk ? `, ${nSk} særkullsbarn` : ''}.`;
+    const liq = input.assets.filter(E.isLiquid).reduce((s, a) => s + (+a.value || 0), 0);
+    const assets = input.assets.filter(a => (+a.value || 0) > 0).map(a => `${a.name} ${kr(a.value)}`);
+    const kpis = [
+      ['Bruttoformue', kr(R.est.brutto)],
+      ['Gjeld', kr(R.est.debtTot)],
+      ['Nettoformue', kr(R.est.netto)],
+      [R.enslig ? 'Dødsbo' : `${gen(R.nA)} dødsbo`, kr(R.bo)],
+      ...(!R.enslig ? [[`${R.nB} – egen formue`, kr(R.bOwn)]] : []),
+      ['Likvide eiendeler', kr(liq)],
+      [`Livsforsikring på ${R.nA}`, kr(R.insA)]
+    ];
+    if (R.gift && (input.saereieM || input.saereieK)) kpis.push(['Særeie', `${R.nm.M} ${kr(input.saereieM)} · ${R.nm.K} ${kr(input.saereieK)}`]);
+    const alts = R.alts.map(a => {
+      if (!a.available) return { num: a.num, title: a.title, na: true, text: a.reason, rows: [] };
+      const rows = [];
+      if (!R.enslig) {
+        rows.push([`${R.nB} totalt`, kr(a.survivor.total)]);
+        if (a.id === 'uskifte' && a.survivor.usk) rows.push(['Uskiftebo (rådighet)', kr(a.survivor.usk)]);
+        rows.push(['Egen formue', kr(a.survivor.own)], ['Arv', kr(a.survivor.arv)], ['Livsforsikring', kr(a.survivor.ins)]);
+      }
+      R.heirs.forEach(h => { const v = flowTo(a, h.id); if (v > 0.5) rows.push([h.name, kr(v)]); });
+      const oth = flowTo(a, 'O'); if (oth > 0.5) rows.push(['Andre/veldedighet', kr(oth)]);
+      let text;
+      if (a.id === 'lov') text = R.enslig ? `Dødsboet på ${kr(R.bo)} fordeles etter arveloven.` : `Boet skiftes nå etter loven. ${R.nB} sitter igjen med ${kr(a.survivor.total)}.`;
+      else if (a.id === 'uskifte') text = `${R.nB} overtar boet udelt og rår over ${kr(a.survivor.total)}. Arven etter ${R.nA} gjøres opp når begge er døde.`;
+      else if (a.id === 'minimum') text = `Barna begrenses til pliktdel og ${R.nB} til minstearv. Fri del går til ${input.friTo === 'S' ? R.nB : input.friTo === 'barna' ? 'barna' : 'annen mottaker'}.`;
+      else text = `Fordeling etter ${gen(R.nA)} ønske, kontrollert mot pliktdel og minstearv. ${R.enslig ? `Dødsbo ${kr(R.bo)}.` : `${R.nB} totalt ${kr(a.survivor.total)}.`}`;
+      return { num: a.num, title: a.title, na: false, text, rows };
+    });
+    const need = (!R.enslig && R.alts[0].need) ? `Udekket forsikringsbehov på ${gen(R.nA)} liv: ${kr(R.alts[0].need.gap)} (lovens fordeling).` : '';
+    const title = R.enslig ? `Arveoppgjør for ${R.nm.M}` : `Arveoppgjør for ${R.nm.M} og ${R.nm.K}`;
+    const lead = R.enslig ? `${R.nm.M} dør. 1 G = ${kr(R.G)}.` : `${R.nA} dør først. 1 G = ${kr(R.G)}.`;
+    return { title, lead, family, assets, kpis, alts, need };
+  }
+  function summaryPlain(p) {
+    const lines = [p.title, p.lead, '', p.family, p.assets.join(' · '), '', 'Økonomi'];
+    p.kpis.forEach(k => lines.push(`${k[0]}: ${k[1]}`));
+    p.alts.forEach(a => {
+      lines.push('', `${a.num}. ${a.title}`, a.text);
+      a.rows.forEach(r => lines.push(`  ${r[0]}: ${r[1]}`));
+    });
+    if (p.need) { lines.push('', p.need); }
+    lines.push('', 'Forenklet modell til illustrasjon. Ikke juridisk rådgivning.');
+    return lines.join('\n');
+  }
+  function summaryEmailHtml(p) {
+    const row = (l, v, last) => `<tr><td style="padding:8px 0;border-bottom:${last ? '0' : '1px solid #EAECF0'};font-size:14px;color:#475467">${esc(l)}</td><td style="padding:8px 0;border-bottom:${last ? '0' : '1px solid #EAECF0'};font-size:14px;font-weight:600;color:#002359;text-align:right;white-space:nowrap">${esc(v)}</td></tr>`;
+    const card = (inner) => `<div style="background:#ffffff;border:1px solid #EAECF0;border-radius:12px;padding:20px 24px;margin:0 0 16px">${inner}</div>`;
+    const alts = p.alts.map(a => card(
+      `<div style="font-size:11px;letter-spacing:.08em;color:#0A5EDC;font-weight:600">ALTERNATIV ${a.num}</div>`
+      + `<div style="font-size:18px;font-weight:600;color:#002359;margin:4px 0 8px">${esc(a.title)}</div>`
+      + `<p style="margin:0 0 ${a.rows.length ? '12px' : '0'};font-size:14px;line-height:21px;color:#475467">${esc(a.text)}</p>`
+      + (a.rows.length ? `<table width="100%" cellpadding="0" cellspacing="0">${a.rows.map((r, i) => row(r[0], r[1], i === a.rows.length - 1)).join('')}</table>` : '')
+    )).join('');
+    return `<div style="font-family:'Hanken Grotesk',Arial,Helvetica,sans-serif;max-width:640px;color:#12326E;background:#F9FAFB">
+      <div style="background:#002359;color:#ffffff;padding:28px 32px;border-radius:12px 12px 0 0">
+        <div style="font-size:12px;letter-spacing:.1em;color:#B5CFF5">SÖDERBERG &amp; PARTNERS WEALTH MANAGEMENT</div>
+        <div style="font-size:24px;font-weight:600;letter-spacing:-.02em;margin:8px 0 6px">${esc(p.title)}</div>
+        <div style="font-size:14px;color:#E6EFFB">${esc(p.lead)}</div>
+      </div>
+      <div style="padding:24px 24px 8px">
+        ${card(`<div style="font-size:11px;letter-spacing:.08em;color:#667085;font-weight:600;margin-bottom:8px">FAMILIE OG FORMUE</div>
+          <p style="margin:0 0 12px;font-size:15px;line-height:22px;color:#12326E">${esc(p.family)}</p>
+          <p style="margin:0 0 16px;font-size:13px;line-height:20px;color:#667085">${esc(p.assets.join(' · '))}</p>
+          <table width="100%" cellpadding="0" cellspacing="0">${p.kpis.map((k, i) => row(k[0], k[1], i === p.kpis.length - 1)).join('')}</table>`)}
+        ${alts}
+        ${p.need ? card(`<p style="margin:0;font-size:14px;line-height:21px;color:#12326E">${esc(p.need)}</p>`) : ''}
+        <p style="font-size:12px;line-height:18px;color:#667085;margin:8px 8px 0">Forenklet modell til illustrasjon. Ikke juridisk rådgivning. Arveoppgjør bør gjennomgås med advokat.</p>
+      </div>
+    </div>`;
+  }
+  function summaryOverlay() {
+    const p = summaryPack();
+    const row = (l, v) => `<div class="sum-row"><span>${esc(l)}</span><b>${esc(v)}</b></div>`;
+    return `<div class="scrim" data-action="closeSummary" data-key="summary"><div class="sum-modal" role="dialog" aria-modal="true" aria-labelledby="sum-t">
+      <article class="sum-sheet">
+        <header class="sum-hero">
+          <div class="sum-brand">Söderberg &amp; Partners Wealth Management</div>
+          <h2 class="sum-title" id="sum-t">${esc(p.title)}</h2>
+          <p>${esc(p.lead)}</p>
+        </header>
+        <div class="sum-body">
+          <section class="sum-card">
+            <div class="eyebrow">Familie og formue</div>
+            <p class="sum-lead">${esc(p.family)}</p>
+            <p class="help">${esc(p.assets.join(' · '))}</p>
+            <div class="sum-rows">${p.kpis.map(k => row(k[0], k[1])).join('')}</div>
+          </section>
+          ${p.alts.map(a => `<section class="sum-card">
+            <div class="eyebrow">Alternativ ${a.num}</div>
+            <h3 class="h3">${esc(a.title)}</h3>
+            <p class="sum-lead">${esc(a.text)}</p>
+            ${a.rows.length ? `<div class="sum-rows">${a.rows.map(r => row(r[0], r[1])).join('')}</div>` : ''}
+          </section>`).join('')}
+          ${p.need ? `<section class="sum-card"><p class="sum-lead">${esc(p.need)}</p></section>` : ''}
+          <p class="help">Forenklet modell til illustrasjon. Ikke juridisk rådgivning. Arveoppgjør bør gjennomgås med advokat.</p>
+        </div>
+      </article>
+      <div class="sum-actions">
+        <button type="button" class="btn btn-primary btn-md" data-action="copySummary" id="sum-copy">
+          <i class="bx ${ui.copied ? 'bx-check' : 'bx-copy'}" aria-hidden="true"></i>${ui.copied ? 'Kopiert' : 'Kopier'}</button>
+        <button type="button" class="btn btn-secondary btn-md" data-action="closeSummary" data-close="1">Lukk</button>
+      </div>
+    </div></div>`;
   }
 
   /* ---------- Footer og modal ---------- */
@@ -763,6 +894,7 @@
   function setTab(id, focus) {
     if (!TAB_IDS.includes(id)) return;
     ui.tab = id;
+    ui.summary = false;
     try { history.replaceState(null, '', '#' + id); } catch (e) { location.hash = id; }
     render();
     scrollToPanel();
@@ -811,6 +943,22 @@
     print: () => window.print(),
     validate: () => { ui.modal = true; render(); const c = document.getElementById('modal-close'); if (c) c.focus(); },
     closeModal: (el, ev) => { if (ev.target === el || el.dataset.close) { ui.modal = false; render(); } },
+    openSummary: () => { ui.summary = true; ui.copied = false; render(); const b = document.getElementById('sum-copy'); if (b) b.focus(); },
+    closeSummary: (el, ev) => { if (!ev || ev.target === el || el.dataset.close) { ui.summary = false; ui.copied = false; render(); } },
+    copySummary: () => {
+      const p = summaryPack();
+      const html = summaryEmailHtml(p), text = summaryPlain(p);
+      const done = () => { ui.copied = true; render(); setTimeout(() => { if (ui.summary) { ui.copied = false; render(); } }, 2000); };
+      const fail = () => { try { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done(); } catch (e) { /* tomt */ } };
+      if (navigator.clipboard && window.ClipboardItem) {
+        const item = new ClipboardItem({
+          'text/html': new Blob([html], { type: 'text/html' }),
+          'text/plain': new Blob([text], { type: 'text/plain' })
+        });
+        navigator.clipboard.write([item]).then(done).catch(fail);
+      } else if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done).catch(fail);
+      else fail();
+    },
     keep: el => {
       const k = el.dataset.alt, id = el.dataset.id;
       const cur = R.alts[ALT_IDX[k]].need.keepIds.slice();
@@ -877,7 +1025,11 @@
     }
     if (ev.key === 'Enter' && ev.target.tagName === 'INPUT') render();
   });
-  document.addEventListener('keydown', ev => { if (ev.key === 'Escape' && ui.modal) { ui.modal = false; render(); } });
+  document.addEventListener('keydown', ev => {
+    if (ev.key !== 'Escape') return;
+    if (ui.summary) { ui.summary = false; ui.copied = false; render(); }
+    else if (ui.modal) { ui.modal = false; render(); }
+  });
   window.addEventListener('hashchange', () => { const h = location.hash.slice(1); if (TAB_IDS.includes(h) && h !== ui.tab) setTab(h); });
 
   /* Tooltip for Sankey */

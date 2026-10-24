@@ -39,7 +39,7 @@
         ['Kone dør · alt. 1 · udekket behov', 0, K.alts[0].need.gap],
         ['Kone dør · alt. 2 · kontantbehov', 21750000, K.alts[1].need.K],
         ['Kone dør · alt. 2 · udekket behov', 0, K.alts[1].need.gap],
-        ['Kone dør · alt. 1 · gjenlevende netto', 41668060, K.alts[0].balance.net]
+        ['Kone dør · alt. 1 · gjenlevende netto', 41918480, K.alts[0].balance.net]
       ].map(([label, exp, act]) => ({ label, exp, act, ok: Math.abs(exp - act) < 1 }));
       const st = ok => ok ? '<span class="ok">Stemmer</span>' : '<span class="bad">Avvik</span>';
       document.getElementById('rows').innerHTML = rows.map((r, i) => `<tr class="${r.ok ? '' : 'fail'}"><td>${i + 1}</td><td>${F.esc(r.label)}</td><td class="r">${F.kr(r.exp)}</td><td class="r amt">${F.kr(r.act)}</td><td class="r">${F.kr(r.act - r.exp)}</td><td>${st(r.ok)}</td></tr>`).join('');

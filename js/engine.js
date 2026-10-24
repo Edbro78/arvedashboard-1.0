@@ -19,7 +19,7 @@
     debtF: 19000000, debtM: 0, debtK: 0,
     saereieM: 0, saereieK: 3000000, skjevM: 0, skjevK: 0,
     insGM: 50, insGK: 20, benM: 'spouse', benK: 'spouse', benNameM: '', benNameK: '',
-    G: 124028,
+    G: 136549,
     uskSaereieInn: false, consent: {}, friTo: 'O', parentsAlive: true,
     insNeed: { lov: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, liqPct: 100, useExisting: true }, uskifte: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, liqPct: 100, useExisting: true } },
     testament: {}, testamentNote: ''
@@ -304,7 +304,7 @@
 
     /* ALT 4 – testament */
     const a4 = mk(4, 'testament', 'Testament', 'Alt utover minimumsarven fordeles etter avdødes ønske. Fordelingen kontrolleres mot pliktdelsarv og minstearv.');
-    const t = (inp.testament || {})[A] || defaultTestament(heirs, enslig, bo, pl, enslig ? 0 : Math.min(Math.max(bo, 0), minsteBase));
+    const t = (inp.testament || {})[A] || defaultTestament(heirs, enslig, bo, pl, enslig ? 0 : Math.min(Math.max(bo, 0), minsteBase), L);
     let t4 = null;
     if (insolvent) unavailable(a4, insolventMsg);
     else {
@@ -425,28 +425,50 @@
 
     return { G, g4, g6, g15, A, B, nA, nB, nm, gift, samb, sambF, enslig, felles, skA, skB, heirs, nodes, est, bo, bOwn, insA, insB, insGA, insolvent, L, pl, alts: [a1, a2, a3, a4], t4, testament: t, PAL };
   }
-  /* Standardtestament som alltid oppfyller pliktdelsarv og minstearv */
-  function defaultTestament(heirs, enslig, bo, pl, minS) {
+  /* Standardtestament: lovens fordeling, minst lovens minimum, alltid 100 % */
+  function defaultTestament(heirs, enslig, bo, pl, minS, L) {
+    const r2 = n => Math.round(n * 100) / 100;
     const kids = {};
+    const minKid = id => bo > 0 ? Math.ceil(((pl && pl[id]) || 0) / bo * 10000) / 100 : 0;
+    const minSp = !enslig && bo > 0 ? Math.ceil((+minS || 0) / bo * 10000) / 100 : 0;
     if (!(bo > 0)) { heirs.forEach(h => kids[h.id] = 0); return { spouse: enslig ? 0 : 100, other: 0, kids }; }
     if (enslig) {
       if (!heirs.length) return { spouse: 0, other: 100, kids };
       const each = Math.floor(10000 / heirs.length) / 100;
-      heirs.forEach(h => kids[h.id] = each);
-      return { spouse: 0, other: Math.round((100 - each * heirs.length) * 100) / 100, kids };
+      heirs.forEach(h => kids[h.id] = Math.max(each, minKid(h.id)));
+      const used = r2(sum(Object.values(kids)));
+      return { spouse: 0, other: r2(Math.max(0, 100 - used)), kids };
     }
-    let kidsSum = 0;
-    heirs.forEach(h => { const p = Math.ceil(((pl && pl[h.id]) || 0) / bo * 10000) / 100; kids[h.id] = p; kidsSum += p; });
-    const spouse = Math.max(0, Math.round((100 - kidsSum) * 100) / 100);
-    return { spouse, other: 0, kids };
+    heirs.forEach(h => {
+      const fromLov = L && bo > 0 ? (L.kids[h.id] || 0) / bo * 100 : 0;
+      kids[h.id] = Math.max(r2(fromLov), minKid(h.id));
+    });
+    let spouse = Math.max(L && bo > 0 ? r2((L.spouse || 0) / bo * 100) : 0, minSp);
+    let other = L && (L.parents || 0) > 0.5 ? r2((L.parents || 0) / bo * 100) : 0;
+    let used = r2(spouse + sum(Object.values(kids)) + other);
+    if (used > 100) {
+      let exc = Math.max(0, spouse - minSp);
+      heirs.forEach(h => { exc += Math.max(0, kids[h.id] - minKid(h.id)); });
+      const over = used - 100;
+      if (exc > 0) {
+        const cut = (x, m) => x - over * Math.max(0, x - m) / exc;
+        spouse = Math.max(minSp, r2(cut(spouse, minSp)));
+        heirs.forEach(h => { kids[h.id] = Math.max(minKid(h.id), r2(cut(kids[h.id], minKid(h.id)))); });
+        other = 0;
+      }
+    }
+    used = r2(spouse + sum(Object.values(kids)) + other);
+    spouse = r2(spouse + (100 - used));
+    if (spouse < minSp) { other = r2(other + spouse - minSp); spouse = minSp; }
+    return { spouse: r2(Math.max(0, spouse)), other: r2(Math.max(0, other)), kids };
   }
 
   /* ---------- kontrolltall fra testcase ---------- */
   function validate() {
     const rows = [];
     const chk = (label, exp, act) => rows.push({ label, exp, act, ok: Math.abs(exp - act) < 1 });
-    const K = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'K', friTo: 'S' }));
-    const M = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'M', friTo: 'S' }));
+    const K = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'K', friTo: 'S', G: 124028 }));
+    const M = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'M', friTo: 'S', G: 124028 }));
     const flow = (r, alt, to, sub) => sum(r.alts[alt].flows.filter(f => f.from === 'A' && f.to === to && (sub === undefined || (f.sub || '') === sub || (sub === 'fri' && f.hatch === 'fri'))).map(f => f.value));
     chk('4 G', 496112, K.g4); chk('15 G', 1860420, K.g15);
     chk('Forsikring mann (50 G)', 6201400, M.insA); chk('Forsikring kone (20 G)', 2480560, K.insA);
