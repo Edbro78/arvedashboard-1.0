@@ -210,15 +210,15 @@
       const sel = t.id === ui.tab;
       const alt = !!t.num;
       const na = ALT_IDX[t.id] != null && !R.alts[ALT_IDX[t.id]].available;
-      return `<button type="button" class="tab${alt ? ` tab-alt alt-${t.num}` : ''}${na ? ' na' : ''}" role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-action="tab" data-tab="${t.id}">
-        <span class="tab-l1">${alt ? `<span class="tab-n">${t.num}</span>` : ''}${esc(t.label)}</span>${alt ? '' : `<span class="tab-l2">${esc(tabSub(t.id))}</span>`}</button>`;
+      return `<button type="button" class="tab${alt ? ` tab-alt alt-${t.num}` : ' tab-nav'}${na ? ' na' : ''}" role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-action="tab" data-tab="${t.id}">
+        <span class="tab-l1">${alt ? `<span class="tab-n">${t.num}</span>` : ''}${esc(t.label)}</span></button>`;
     };
     const nav = t => !t.num;
     const alts = TABS.filter(t => t.num);
-    return `<nav class="tabbar" data-key="tabbar" aria-label="Alternativer"><div class="wrap"><div class="tabs" role="tablist">
-      ${TABS.filter(t => nav(t) && t.id !== 'sammenligning').map(btn).join('')}
+    return `<nav class="tabbar" data-key="tabbar" aria-label="Navigasjon og alternativer"><div class="wrap"><div class="tabs" role="tablist">
+      <div class="nav-group" role="presentation"><span class="nav-group-l">Navigasjon</span>${TABS.filter(t => nav(t) && t.id !== 'sammenligning').map(btn).join('')}</div>
       <div class="alt-group" role="presentation"><span class="alt-group-l">Fire alternativer</span>${alts.map(btn).join('')}</div>
-      ${btn(TABS.find(t => t.id === 'sammenligning'))}
+      <div class="nav-group" role="presentation">${btn(TABS.find(t => t.id === 'sammenligning'))}</div>
     </div></div></nav>`;
   }
 

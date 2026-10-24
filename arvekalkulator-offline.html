@@ -143,9 +143,18 @@ h1,h2,h3,h4,p{margin:0}
 .tab[aria-selected="true"]{color:var(--sp-navy);border-bottom-color:var(--blue-main)}
 .tab[aria-selected="true"] .tab-n{color:var(--blue-main)}
 .tab.na .tab-l2{color:var(--gray-400)}
-.alt-group{display:flex;align-items:center;gap:6px;margin:8px 8px 8px 12px;padding:6px 8px 6px 12px;background:var(--white);
+.nav-group,.alt-group{display:flex;align-items:center;gap:6px;margin:8px 0;padding:6px 8px}
+.nav-group{background:var(--secondary-50);border:1px solid var(--secondary-200);border-radius:12px}
+.nav-group-l,.alt-group-l{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;flex:none;padding:0 6px 0 4px}
+.nav-group-l{color:var(--secondary-700)}
+.alt-group{margin-left:10px;margin-right:10px;padding:6px 8px 6px 12px;background:var(--white);
   border:1px solid var(--gray-200);border-radius:12px;box-shadow:var(--shadow-xs)}
-.alt-group-l{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--gray-500);flex:none;padding-right:4px}
+.alt-group-l{color:var(--gray-500);padding-right:4px}
+.tab-nav{border:0;border-bottom:0;margin:0;padding:8px 14px;border-radius:8px;color:var(--secondary-700)}
+.tab-nav .tab-l1{font-size:14px;line-height:20px;font-weight:500}
+.tab-nav:hover{background:var(--secondary-100);color:var(--sp-navy)}
+.tab-nav[aria-selected="true"]{background:var(--sp-navy);color:var(--white);border-bottom-color:transparent;box-shadow:var(--shadow-xs)}
+.tab-nav[aria-selected="true"]:hover{color:var(--white);background:var(--sp-navy-ink)}
 .tab-alt{border:1px solid transparent;border-radius:8px;margin-bottom:0;padding:8px 12px;background:transparent}
 .tab-alt .tab-l1{align-items:center}
 .tab-alt .tab-n{width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;
@@ -505,8 +514,8 @@ table.t tr.viol td{background:var(--error-bg-soft)}
   .fp-hero{grid-template-columns:1fr;gap:32px;padding:40px 32px}
   .fp-art{margin:0}
   .fp-two{grid-template-columns:1fr}
-  .alt-group-l{display:none}
-  .alt-group{margin-left:6px}
+  .alt-group-l,.nav-group-l{display:none}
+  .alt-group{margin-left:6px;margin-right:6px}
 }
 @media (max-width:767px){
   .fp-hero{padding:32px 24px}
@@ -1578,15 +1587,15 @@ table.t tr.viol td{background:var(--error-bg-soft)}
       const sel = t.id === ui.tab;
       const alt = !!t.num;
       const na = ALT_IDX[t.id] != null && !R.alts[ALT_IDX[t.id]].available;
-      return `<button type="button" class="tab${alt ? ` tab-alt alt-${t.num}` : ''}${na ? ' na' : ''}" role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-action="tab" data-tab="${t.id}">
-        <span class="tab-l1">${alt ? `<span class="tab-n">${t.num}</span>` : ''}${esc(t.label)}</span>${alt ? '' : `<span class="tab-l2">${esc(tabSub(t.id))}</span>`}</button>`;
+      return `<button type="button" class="tab${alt ? ` tab-alt alt-${t.num}` : ' tab-nav'}${na ? ' na' : ''}" role="tab" id="tab-${t.id}" aria-controls="panel" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-action="tab" data-tab="${t.id}">
+        <span class="tab-l1">${alt ? `<span class="tab-n">${t.num}</span>` : ''}${esc(t.label)}</span></button>`;
     };
     const nav = t => !t.num;
     const alts = TABS.filter(t => t.num);
-    return `<nav class="tabbar" data-key="tabbar" aria-label="Alternativer"><div class="wrap"><div class="tabs" role="tablist">
-      ${TABS.filter(t => nav(t) && t.id !== 'sammenligning').map(btn).join('')}
+    return `<nav class="tabbar" data-key="tabbar" aria-label="Navigasjon og alternativer"><div class="wrap"><div class="tabs" role="tablist">
+      <div class="nav-group" role="presentation"><span class="nav-group-l">Navigasjon</span>${TABS.filter(t => nav(t) && t.id !== 'sammenligning').map(btn).join('')}</div>
       <div class="alt-group" role="presentation"><span class="alt-group-l">Fire alternativer</span>${alts.map(btn).join('')}</div>
-      ${btn(TABS.find(t => t.id === 'sammenligning'))}
+      <div class="nav-group" role="presentation">${btn(TABS.find(t => t.id === 'sammenligning'))}</div>
     </div></div></nav>`;
   }
 
