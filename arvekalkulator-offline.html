@@ -1346,7 +1346,7 @@ table.t tr.viol td{background:var(--error-bg-soft)}
   }
 
   function hero() {
-    const title = R.enslig ? `Arveoppgjør for ${R.nm.M}` : `Arveoppgjør for ${R.nm.M} og ${R.nm.K}`;
+    const title = 'Arveoppgjør for ektefeller og samboere';
     const scen = R.enslig ? `Scenario: ${R.nm.M} dør. 1 G = ${kr(R.G)}.` : `Scenario: ${R.nA} dør først, ${R.nB} er gjenlevende. 1 G = ${kr(R.G)}.`;
     return `<section class="wrap hero" data-key="hero"><div><div class="eyebrow">ARVEOPPGJØR</div><h1 class="h1">${esc(title)}</h1><p class="lead">${esc(scen)}</p></div>
       ${R.enslig ? '' : `<div class="who"><span class="who-label" id="who-l">Hvem dør først</span>${seg('firstDies', input.firstDies, [{ v: 'M', l: R.nm.M }, { v: 'K', l: R.nm.K }], 'seg-dark', 'Hvem dør først')}</div>`}
