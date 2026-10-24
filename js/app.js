@@ -170,7 +170,7 @@
 
   function header() {
     return `<header class="hdr" data-key="hdr"><div class="wrap hdr-in">
-      <div class="brand"><img src="assets/spwm-logo.svg" alt="Söderberg &amp; Partners Wealth Management"><span class="vr"></span><span class="app-name">Arvekalkulator</span></div>
+      <div class="brand"><img src="assets/spwm-logo.svg" alt="Söderberg &amp; Partners Wealth Management"></div>
       <button type="button" class="btn btn-secondary btn-sm" data-action="print"><i class="bx bx-download" aria-hidden="true"></i>Eksporter PDF-rapport</button>
     </div></header>`;
   }
@@ -895,10 +895,33 @@
     if (!TAB_IDS.includes(id)) return;
     ui.tab = id;
     ui.summary = false;
-    try { history.replaceState(null, '', '#' + id); } catch (e) { location.hash = id; }
+    try { history.replaceState(null, '', '#' + id); } catch (e) { /* hash-tilordning scroller dokumentet */ }
+    if (ALT_IDX[id] != null) stayTop();
     render();
-    scrollToPanel();
-    if (focus) { const t = document.getElementById('tab-' + id); if (t) t.focus(); }
+    if (ALT_IDX[id] != null) stayTop();
+    else scrollToPanel();
+    if (focus) {
+      const t = document.getElementById('tab-' + id);
+      if (t) t.focus({ preventScroll: true });
+    }
+  }
+  /* De fire alternativene skal alltid åpnes på toppen (KPI-raden synlig). */
+  function stayTop() {
+    const html = document.documentElement;
+    html.classList.add('pin-top');
+    const jump = () => {
+      html.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    };
+    jump();
+    const t0 = performance.now();
+    const hold = () => {
+      jump();
+      if (performance.now() - t0 < 400) requestAnimationFrame(hold);
+      else html.classList.remove('pin-top');
+    };
+    requestAnimationFrame(hold);
   }
   /* Fanelinjen er sticky, så innholdet legges rett under den */
   function scrollToPanel() {
