@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="nb">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Arvekalkulator – kontrolltall</title>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,600&display=swap">
+  <link rel="stylesheet" href="css/tokens.css">
+  <link rel="stylesheet" href="css/app.css">
+  <style>
+    .ok{color:var(--success-700);font-weight:600}
+    .bad{color:var(--error-700);font-weight:600}
+    tr.fail td{background:var(--error-bg-soft)}
+  </style>
+</head>
+<body>
+  <header class="hdr"><div class="wrap hdr-in"><div class="brand"><img src="assets/spwm-logo.svg" alt="Söderberg &amp; Partners Wealth Management"><span class="vr"></span><span class="app-name">Arvekalkulator · kontrolltall</span></div>
+    <a class="btn btn-secondary btn-sm" href="index.html">Til kalkulatoren</a></div></header>
+  <main class="wrap main" style="display:flex;flex-direction:column;gap:24px">
+    <div><div class="eyebrow">VALIDERING</div><h1 class="h2" style="margin-top:6px">Kontrolltall fra Arveregler.md § 12</h1>
+      <p class="lead" id="sum" style="margin-top:8px"></p></div>
+    <div id="banner"></div>
+    <section class="card"><div class="card-h"><h3 class="h3">Testcase – 27 kontrolltall</h3></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>#</th><th>Kontrolltall</th><th class="r">Forventet</th><th class="r">Beregnet</th><th class="r">Avvik</th><th>Status</th></tr></thead><tbody id="rows"></tbody></table></div></section>
+    <section class="card"><div class="card-h"><h3 class="h3">Forsikringsbehov (standardparametere)</h3></div>
+      <div class="tbl-wrap"><table class="t"><thead><tr><th>Kontroll</th><th class="r">Forventet</th><th class="r">Beregnet</th><th>Status</th></tr></thead><tbody id="need"></tbody></table></div></section>
+  </main>
+  <script src="js/engine.js"></script>
+  <script src="js/format.js"></script>
+  <script>
+    (function () {
+      const E = window.ArveEngine, F = window.Fmt;
+      const rows = E.validate();
+      const K = E.compute(E.clone(E.DEFAULT_INPUT));
+      const need = [
+        ['Kone dør · alt. 1 · kontantbehov', 25828125, K.alts[0].need.K],
+        ['Kone dør · alt. 1 · udekket behov', 23347565, K.alts[0].need.gap],
+        ['Kone dør · alt. 2 · kontantbehov', 21750000, K.alts[1].need.K],
+        ['Kone dør · alt. 2 · udekket behov', 19269440, K.alts[1].need.gap]
+      ].map(([label, exp, act]) => ({ label, exp, act, ok: Math.abs(exp - act) < 1 }));
+      const st = ok => ok ? '<span class="ok">Stemmer</span>' : '<span class="bad">Avvik</span>';
+      document.getElementById('rows').innerHTML = rows.map((r, i) => `<tr class="${r.ok ? '' : 'fail'}"><td>${i + 1}</td><td>${F.esc(r.label)}</td><td class="r">${F.kr(r.exp)}</td><td class="r amt">${F.kr(r.act)}</td><td class="r">${F.kr(r.act - r.exp)}</td><td>${st(r.ok)}</td></tr>`).join('');
+      document.getElementById('need').innerHTML = need.map(r => `<tr class="${r.ok ? '' : 'fail'}"><td>${F.esc(r.label)}</td><td class="r">${F.kr(r.exp)}</td><td class="r amt">${F.kr(r.act)}</td><td>${st(r.ok)}</td></tr>`).join('');
+      const ok = rows.filter(r => r.ok).length, okN = need.filter(r => r.ok).length;
+      document.getElementById('sum').textContent = `${ok} av ${rows.length} kontrolltall stemmer. Forsikringsbehov: ${okN} av ${need.length}. Toleranse under 1 kr.`;
+      const all = ok === rows.length && okN === need.length;
+      document.getElementById('banner').innerHTML = `<div class="banner ${all ? 'success' : 'error'}">${all ? 'Beregningsmotoren reproduserer alle kontrolltall.' : 'Ett eller flere kontrolltall avviker.'}</div>`;
+    })();
+  </script>
+</body>
+</html>

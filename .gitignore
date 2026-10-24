@@ -1,0 +1,5 @@
+# Lisensierte kundefonter skal ikke ligge i et offentlig repo
+*.otf
+node_modules/
+.DS_Store
+Thumbs.db
