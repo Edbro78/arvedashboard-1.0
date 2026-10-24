@@ -263,27 +263,53 @@
       const m = (x0 + x1) / 2;
       return `M${x0},${y0} C${m},${y0} ${m},${y1} ${x1},${y1} L${x1},${y1 + w} C${m},${y1 + w} ${m},${y0 + w} ${x0},${y0 + w} Z`;
     };
-    const band = (d, fill, o, delay) => `<path class="fp-band" d="${d}" fill="${fill}" fill-opacity="${o}" style="--d:${delay}ms"></path>`;
-    const node = (x, y, h, fill, delay) => `<rect class="fp-node" x="${x}" y="${y}" width="8" height="${h}" rx="2" fill="${fill}" style="--d:${delay}ms"></rect>`;
+    const mid = (x0, y0, x1, y1, w) => {
+      const m = (x0 + x1) / 2, a = y0 + w / 2, b = y1 + w / 2;
+      return `M${x0},${a} C${m},${a} ${m},${b} ${x1},${b}`;
+    };
+    const grads = [];
+    const band = (id, x0, y0, x1, y1, w, c0, c1, o0, o1, delay, dots) => {
+      if (c1) grads.push(`<linearGradient id="fpg-${id}" gradientUnits="userSpaceOnUse" x1="${x0}" y1="0" x2="${x1}" y2="0">
+        <stop offset="0" stop-color="${c0}" stop-opacity="${o0}"></stop><stop offset="1" stop-color="${c1}" stop-opacity="${o1}"></stop></linearGradient>`);
+      const fill = c1 ? `url(#fpg-${id})` : c0;
+      const flow = Array.from({ length: dots }, (_, k) => `<circle r="${w > 60 ? 2.2 : 1.7}" class="fp-dot"><animateMotion dur="${5 + (k % 2)}s" begin="${(-k * (5 / dots) - delay / 400).toFixed(2)}s" repeatCount="indefinite" path="${mid(x0, y0, x1, y1, w)}"></animateMotion></circle>`).join('');
+      return `<path class="fp-band" d="${bp(x0, y0, x1, y1, w)}" fill="${fill}" style="--d:${delay}ms"></path><g class="fp-flow">${flow}</g>`;
+    };
+    const node = (x, y, h, fill, delay, glow) => `<rect class="fp-node" x="${x}" y="${y}" width="10" height="${h}" rx="3" fill="${fill}"${glow ? ' filter="url(#fp-glow)"' : ''} style="--d:${delay}ms"></rect>`;
     const lbl = (x, y, t, anchor, cls = '') => `<text class="fp-lbl ${cls}" x="${x}" y="${y}" text-anchor="${anchor}">${esc(t)}</text>`;
     const survivor = R.enslig ? 'Arvinger' : 'Gjenlevende';
+    const X0 = 28, X1 = 300, X2 = 560;
+    const bands = [
+      band('a', X0 + 10, 90, X1, 110, 110, '#FFFFFF', '#A0AEC4', .30, .38, 0, 3),
+      band('b', X0 + 10, 200, X1, 250, 150, '#FFFFFF', '#84AEED', .30, .45, 90, 4),
+      band('e', X1 + 10, 40, X2, 30, 36, 'url(#fp-ins)', null, 0, 0, 220, 2),
+      band('c', X1 + 10, 110, X2, 66, 110, '#A0AEC4', '#FFFFFF', .38, .30, 300, 3),
+      band('d', X1 + 10, 250, X2, 176, 40, '#84AEED', '#FFFFFF', .45, .30, 380, 2),
+      band('f', X1 + 10, 290, X2, 250, 55, '#84AEED', '#3B7EE3', .45, .75, 460, 2),
+      band('g', X1 + 10, 345, X2, 330, 55, '#84AEED', '#84AEED', .45, .65, 540, 2)
+    ].join('');
     return `<figure class="fp-art" aria-hidden="true">
-      <svg viewBox="0 0 520 320" role="presentation">
-        <defs><pattern id="fp-ins" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="6" height="6" fill="#D1FADF"></rect><rect width="2.5" height="6" fill="#079455"></rect></pattern></defs>
-        ${band(bp(28, 70, 210, 30, 80), '#A0AEC4', .28, 0)}
-        ${band(bp(28, 150, 210, 140, 100), '#84AEED', .32, 80)}
-        ${band(bp(218, 30, 400, 14, 80), '#A0AEC4', .28, 200)}
-        ${band(bp(218, 140, 400, 94, 25), '#FFFFFF', .22, 280)}
-        ${band(bp(218, 262, 400, 119, 28), 'url(#fp-ins)', .8, 360)}
-        ${band(bp(218, 165, 400, 165, 37.5), '#3B7EE3', .6, 440)}
-        ${band(bp(218, 202.5, 400, 216, 37.5), '#84AEED', .5, 520)}
-        ${node(20, 70, 180, '#FFFFFF', 0)}
-        ${node(210, 30, 80, '#A0AEC4', 120)}${node(210, 140, 100, '#84AEED', 120)}${node(210, 262, 28, 'url(#fp-ins)', 120)}
-        ${node(400, 14, 133, '#FFFFFF', 560)}${node(400, 165, 37.5, '#3B7EE3', 600)}${node(400, 216, 37.5, '#84AEED', 640)}
-        ${lbl(20, 56, 'Formue', 'start', 'strong')}
-        ${lbl(200, 74, 'Egen formue', 'end')}${lbl(200, 194, 'Dødsbo', 'end')}${lbl(200, 280, 'Livsforsikring', 'end')}
-        ${lbl(416, 84, survivor, 'start', 'strong')}${lbl(416, 188, 'Barn', 'start', 'strong')}${lbl(416, 239, 'Barn', 'start', 'strong')}
+      <svg viewBox="0 0 700 420" role="presentation">
+        <defs>
+          <pattern id="fp-ins" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="7" height="7" fill="#D1FADF" fill-opacity=".9"></rect><rect width="2.6" height="7" fill="#079455"></rect></pattern>
+          <pattern id="fp-grid" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#FFFFFF" fill-opacity=".09"></circle></pattern>
+          <radialGradient id="fp-halo" cx="62%" cy="42%" r="60%"><stop offset="0" stop-color="#3B7EE3" stop-opacity=".32"></stop><stop offset="1" stop-color="#3B7EE3" stop-opacity="0"></stop></radialGradient>
+          <filter id="fp-glow" x="-200%" y="-20%" width="500%" height="140%"><feGaussianBlur stdDeviation="5" result="b"></feGaussianBlur>
+            <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
+          ${grads.join('')}
+        </defs>
+        <rect width="700" height="420" fill="url(#fp-grid)"></rect>
+        <rect width="700" height="420" fill="url(#fp-halo)"></rect>
+        ${bands}
+        ${node(X0, 90, 260, '#FFFFFF', 0, true)}
+        ${node(X1, 40, 36, 'url(#fp-ins)', 140)}${node(X1, 110, 110, '#A0AEC4', 140)}${node(X1, 250, 150, '#84AEED', 140)}
+        ${node(X2, 30, 186, '#FFFFFF', 620, true)}${node(X2, 250, 55, '#3B7EE3', 660, true)}${node(X2, 330, 55, '#84AEED', 700, true)}
+        ${lbl(X0, 74, 'Formue', 'start', 'strong')}
+        ${lbl(X1 + 5, 30, 'Livsforsikring', 'middle')}${lbl(X1 + 5, 100, 'Egen formue', 'middle')}${lbl(X1 + 5, 240, 'Dødsbo', 'middle')}
+        ${lbl(X2 + 24, 112, survivor, 'start', 'strong')}${lbl(X2 + 24, 132, 'Formue, arv', 'start', 'sub')}${lbl(X2 + 24, 148, 'og forsikring', 'start', 'sub')}
+        ${lbl(X2 + 24, 276, 'Barn', 'start', 'strong')}${lbl(X2 + 24, 294, 'Arv', 'start', 'sub')}
+        ${lbl(X2 + 24, 356, 'Barn', 'start', 'strong')}${lbl(X2 + 24, 374, 'Arv', 'start', 'sub')}
       </svg>
       <figcaption class="fp-cap"><span>${sq('#A0AEC4')}Egen formue</span><span>${sq('#84AEED')}Arv fra dødsboet</span><span>${sq('hatch')}Livsforsikring</span></figcaption>
     </figure>`;
