@@ -48,13 +48,12 @@
     let saved = null;
     try { saved = JSON.parse(localStorage.getItem(STORE) || 'null'); } catch (e) { saved = null; }
     input = normalize(saved && saved.input);
-    if (saved && TAB_IDS.includes(saved.tab)) ui.tab = saved.tab;
     if (saved && typeof saved.showCalc === 'boolean') ui.showCalc = saved.showCalc;
-    const h = location.hash.slice(1);
-    if (TAB_IDS.includes(h)) ui.tab = h;
+    ui.tab = 'forside';
+    try { history.replaceState(null, '', '#forside'); } catch (e) { /* privat modus */ }
   }
   function save() {
-    try { localStorage.setItem(STORE, JSON.stringify({ input, tab: ui.tab, showCalc: ui.showCalc })); } catch (e) { /* privat modus */ }
+    try { localStorage.setItem(STORE, JSON.stringify({ input, showCalc: ui.showCalc })); } catch (e) { /* privat modus */ }
   }
   const getP = path => path.split('.').reduce((o, k) => o == null ? undefined : o[k], input);
   function setP(path, v) {
@@ -140,6 +139,15 @@
   const banners = (arr, key) => arr && arr.length ? `<div class="banners" data-key="${key || 'banners'}">${arr.map(w => banner(w.level, w.text)).join('')}</div>` : '';
   const sq = c => c === 'hatch' || c === 'ins' ? `<span class="sq hatch-ins"></span>` : c === 'fri' ? `<span class="sq hatch-fri"></span>` : `<span class="sq" style="background:${c}"></span>`;
   const dot = c => c === 'ins' ? `<span class="dot hatch-ins"></span>` : c === 'fri' ? `<span class="dot hatch-fri"></span>` : `<span class="dot" style="background:${c}"></span>`;
+  const ini = s => ((s || '?').trim().charAt(0) || '?').toUpperCase();
+  const TYPE_COLOR = { hus: '#002359', fritid: '#264472', bil: '#405A82', innbo: '#667085', selskap: '#3B7EE3', fond: '#84AEED', bank: '#B5CFF5', annet: '#8091AC' };
+  function stackBar(segs, opts = {}) {
+    const items = (segs || []).filter(s => s.v > 0.5);
+    if (!items.length) return '';
+    const bar = items.map(s => `<span class="viz-seg${s.hatch ? ' hatch-ins' : ''}" style="flex:${Math.max(s.v, 1)} 1 0${s.hatch ? '' : `;background:${s.c}`}" title="${esc(s.l + ': ' + kr(s.v))}"></span>`).join('');
+    const leg = opts.legend === false ? '' : `<div class="viz-leg">${items.map(s => `<span>${sq(s.hatch ? 'hatch' : s.c)}${esc(s.l)} <b>${opts.short ? F.short(s.v) : kr(s.v)}</b></span>`).join('')}</div>`;
+    return `<div class="viz" data-key="${esc(opts.key || 'viz')}"><div class="viz-bar" role="img" aria-label="${esc(opts.label || '')}">${bar}</div>${leg}</div>`;
+  }
   function seg(bind, value, opts, cls = '', label = '') {
     return `<div class="seg ${cls}" role="radiogroup"${label ? ` aria-label="${esc(label)}"` : ''}>${opts.map(o => {
       const on = o.v === value;
@@ -246,7 +254,6 @@
         <p class="fp-lead">Se hvordan formuen fordeles etter loven, ved uskifte, med minimumsarv og med testament. Beregningene følger arveloven av 2019 og oppdateres fortløpende når forutsetningene endres.</p>
         <div class="fp-cta">
           <button type="button" class="btn btn-md fp-btn-w" data-action="tab" data-tab="inndata">Start med familie og formue</button>
-          <button type="button" class="btn btn-md fp-btn-ghost" data-action="tab" data-tab="sammenligning">Se sammenligningen</button>
         </div>
       </div>
       ${heroArt()}
@@ -289,7 +296,8 @@
   }
 
   /* Illustrasjon av formuens vei, uten tall */
-  function heroArt() {
+  function heroArt(pfx = '') {
+    const gid = s => pfx + s;
     const bp = (x0, y0, x1, y1, w) => {
       const m = (x0 + x1) / 2;
       return `M${x0},${y0} C${m},${y0} ${m},${y1} ${x1},${y1} L${x1},${y1 + w} C${m},${y1 + w} ${m},${y0 + w} ${x0},${y0 + w} Z`;
@@ -300,20 +308,20 @@
     };
     const grads = [];
     const band = (id, x0, y0, x1, y1, w, c0, c1, o0, o1, delay, dots) => {
-      if (c1) grads.push(`<linearGradient id="fpg-${id}" gradientUnits="userSpaceOnUse" x1="${x0}" y1="0" x2="${x1}" y2="0">
+      if (c1) grads.push(`<linearGradient id="${gid('fpg-' + id)}" gradientUnits="userSpaceOnUse" x1="${x0}" y1="0" x2="${x1}" y2="0">
         <stop offset="0" stop-color="${c0}" stop-opacity="${o0}"></stop><stop offset="1" stop-color="${c1}" stop-opacity="${o1}"></stop></linearGradient>`);
-      const fill = c1 ? `url(#fpg-${id})` : c0;
-      const flow = Array.from({ length: dots }, (_, k) => `<circle r="${w > 60 ? 2.2 : 1.7}" class="fp-dot"><animateMotion dur="${5 + (k % 2)}s" begin="${(-k * (5 / dots) - delay / 400).toFixed(2)}s" repeatCount="indefinite" path="${mid(x0, y0, x1, y1, w)}"></animateMotion></circle>`).join('');
-      return `<path class="fp-band" d="${bp(x0, y0, x1, y1, w)}" fill="${fill}" style="--d:${delay}ms"></path><g class="fp-flow">${flow}</g>`;
+      const fill = c1 ? `url(#${gid('fpg-' + id)})` : c0;
+      const flow = pfx ? '' : Array.from({ length: dots }, (_, k) => `<circle r="${w > 60 ? 2.2 : 1.7}" class="fp-dot"><animateMotion dur="${5 + (k % 2)}s" begin="${(-k * (5 / dots) - delay / 400).toFixed(2)}s" repeatCount="indefinite" path="${mid(x0, y0, x1, y1, w)}"></animateMotion></circle>`).join('');
+      return `<path class="fp-band" d="${bp(x0, y0, x1, y1, w)}" fill="${fill}" style="--d:${delay}ms"></path>${flow ? `<g class="fp-flow">${flow}</g>` : ''}`;
     };
-    const node = (x, y, h, fill, delay, glow) => `<rect class="fp-node" x="${x}" y="${y}" width="10" height="${h}" rx="3" fill="${fill}"${glow ? ' filter="url(#fp-glow)"' : ''} style="--d:${delay}ms"></rect>`;
+    const node = (x, y, h, fill, delay, glow) => `<rect class="fp-node" x="${x}" y="${y}" width="10" height="${h}" rx="3" fill="${fill}"${glow ? ` filter="url(#${gid('fp-glow')})"` : ''} style="--d:${delay}ms"></rect>`;
     const lbl = (x, y, t, anchor, cls = '') => `<text class="fp-lbl ${cls}" x="${x}" y="${y}" text-anchor="${anchor}">${esc(t)}</text>`;
     const survivor = R.enslig ? 'Arvinger' : 'Gjenlevende';
     const X0 = 28, X1 = 300, X2 = 560;
     const bands = [
       band('a', X0 + 10, 90, X1, 110, 110, '#FFFFFF', '#A0AEC4', .30, .38, 0, 3),
       band('b', X0 + 10, 200, X1, 250, 150, '#FFFFFF', '#84AEED', .30, .45, 90, 4),
-      band('e', X1 + 10, 40, X2, 30, 36, 'url(#fp-ins)', null, 0, 0, 220, 2),
+      band('e', X1 + 10, 40, X2, 30, 36, `url(#${gid('fp-ins')})`, null, 0, 0, 220, 2),
       band('c', X1 + 10, 110, X2, 66, 110, '#A0AEC4', '#FFFFFF', .38, .30, 300, 3),
       band('d', X1 + 10, 250, X2, 176, 40, '#84AEED', '#FFFFFF', .45, .30, 380, 2),
       band('f', X1 + 10, 290, X2, 250, 55, '#84AEED', '#3B7EE3', .45, .75, 460, 2),
@@ -322,19 +330,19 @@
     return `<figure class="fp-art" aria-hidden="true">
       <svg viewBox="0 0 700 420" role="presentation">
         <defs>
-          <pattern id="fp-ins" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <pattern id="${gid('fp-ins')}" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
             <rect width="7" height="7" fill="#D1FADF" fill-opacity=".9"></rect><rect width="2.6" height="7" fill="#079455"></rect></pattern>
-          <pattern id="fp-grid" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#FFFFFF" fill-opacity=".09"></circle></pattern>
-          <radialGradient id="fp-halo" cx="62%" cy="42%" r="60%"><stop offset="0" stop-color="#3B7EE3" stop-opacity=".32"></stop><stop offset="1" stop-color="#3B7EE3" stop-opacity="0"></stop></radialGradient>
-          <filter id="fp-glow" x="-200%" y="-20%" width="500%" height="140%"><feGaussianBlur stdDeviation="5" result="b"></feGaussianBlur>
+          <pattern id="${gid('fp-grid')}" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="1" fill="#FFFFFF" fill-opacity=".09"></circle></pattern>
+          <radialGradient id="${gid('fp-halo')}" cx="62%" cy="42%" r="60%"><stop offset="0" stop-color="#3B7EE3" stop-opacity=".32"></stop><stop offset="1" stop-color="#3B7EE3" stop-opacity="0"></stop></radialGradient>
+          <filter id="${gid('fp-glow')}" x="-200%" y="-20%" width="500%" height="140%"><feGaussianBlur stdDeviation="5" result="b"></feGaussianBlur>
             <feMerge><feMergeNode in="b"></feMergeNode><feMergeNode in="SourceGraphic"></feMergeNode></feMerge></filter>
           ${grads.join('')}
         </defs>
-        <rect width="700" height="420" fill="url(#fp-grid)"></rect>
-        <rect width="700" height="420" fill="url(#fp-halo)"></rect>
+        <rect width="700" height="420" fill="url(#${gid('fp-grid')})"></rect>
+        <rect width="700" height="420" fill="url(#${gid('fp-halo')})"></rect>
         ${bands}
         ${node(X0, 90, 260, '#FFFFFF', 0, true)}
-        ${node(X1, 40, 36, 'url(#fp-ins)', 140)}${node(X1, 110, 110, '#A0AEC4', 140)}${node(X1, 250, 150, '#84AEED', 140)}
+        ${node(X1, 40, 36, `url(#${gid('fp-ins')})`, 140)}${node(X1, 110, 110, '#A0AEC4', 140)}${node(X1, 250, 150, '#84AEED', 140)}
         ${node(X2, 30, 186, '#FFFFFF', 620, true)}${node(X2, 250, 55, '#3B7EE3', 660, true)}${node(X2, 330, 55, '#84AEED', 700, true)}
         ${lbl(X0, 74, 'Formue', 'start', 'strong')}
         ${lbl(X1 + 5, 30, 'Livsforsikring', 'middle')}${lbl(X1 + 5, 100, 'Egen formue', 'middle')}${lbl(X1 + 5, 240, 'Dødsbo', 'middle')}
@@ -349,7 +357,7 @@
   /* ---------- Inndata ---------- */
   function ccard(id, icon, title, summary, body, hatch) {
     const open = ui.open[id] !== false;
-    return `<section class="ccard ${open ? 'is-open' : ''}" data-key="card-${id}">
+    return `<section class="ccard tone-${id} ${open ? 'is-open' : ''}" data-key="card-${id}">
       <button type="button" class="ccard-h" data-action="toggleCard" data-id="${id}" aria-expanded="${open}" aria-controls="cb-${id}">
         <span class="icirc ${hatch ? 'hatch-ins' : ''}"><i class="bx ${icon}" aria-hidden="true"></i></span>
         <span class="ccard-t"><span class="ccard-title">${esc(title)}</span><span class="ccard-sum">${esc(summary)}</span></span>
@@ -370,7 +378,7 @@
     const civilL = { gift: 'Gift', samboer: 'Samboer', enslig: 'Enslig' }[i.civil];
     const nSk = (i.nSkM | 0) + (i.nSkK | 0);
     const sum = R.enslig ? `${civilL} · ${R.felles.length} barn` : `${civilL} · ${R.felles.length} felles barn · ${nSk} særkullsbarn`;
-    const stepRow = (bind, val, color, label, help, min = 0) => `<div class="st-row" data-key="st-${bind}">${dot(color)}
+    const stepRow = (bind, val, color, label, help, min = 0) => `<div class="st-row" data-key="st-${bind}" style="--st:${color}">${dot(color)}
       <span class="st-t"><span class="st-l">${esc(label)}</span><span class="help">${esc(help)}</span></span>
       <span class="st-c"><button type="button" class="icon-btn" data-action="step" data-bind="${bind}" data-delta="-1" data-min="${min}" aria-label="Færre: ${esc(label)}"${val <= min ? ' disabled' : ''}><i class="bx bx-minus" aria-hidden="true"></i></button>
       <span class="st-v" aria-live="polite">${val}</span>
@@ -382,8 +390,17 @@
       steps.push(stepRow('nSkM', i.nSkM | 0, '#9747FF', `Særkullsbarn – ${nm.M}`, `arver bare ${nm.M}`));
       steps.push(stepRow('nSkK', i.nSkK | 0, '#DC6803', `Særkullsbarn – ${nm.K}`, `arver bare ${nm.K}`));
     }
+    const people = [];
+    if (!R.enslig) people.push({ c: '#002359', n: nm.M, r: 'Mann', ini: ini(nm.M) });
+    people.push({ c: R.enslig ? '#002359' : '#3B7EE3', n: R.enslig ? nm.M : nm.K, r: R.enslig ? 'Enslig' : 'Kvinne', ini: ini(R.enslig ? nm.M : nm.K) });
+    R.felles.forEach((h, ix) => people.push({ c: h.color || '#0A5EDC', n: h.name, r: R.enslig ? 'Barn' : 'Felles', ini: String(ix + 1), sm: true }));
+    const skKids = Object.values(R.nodes).filter(n => n.kind === 'saerkull');
+    skKids.forEach(h => people.push({ c: h.color, n: h.name, r: h.parent === 'M' ? `Særkull ${nm.M}` : `Særkull ${nm.K}`, ini: ini(h.name), sm: true }));
+    const strip = `<div class="fam-strip" data-key="fam-viz" role="img" aria-label="${esc(sum)}">${people.map(p =>
+      `<div class="fam-p"><span class="fam-av${p.sm ? ' sm' : ''}" style="background:${p.c}">${esc(p.ini)}</span><span class="fam-n">${esc(p.n)}</span><span class="fam-r">${esc(p.r)}</span></div>`
+    ).join('')}</div>`;
     const yn = [{ v: true, l: 'Ja' }, { v: false, l: 'Nei' }];
-    const body = `
+    const body = `${strip}
       <div class="field"><span class="flabel">Sivilstand</span>${seg('civil', i.civil, [{ v: 'gift', l: 'Gift' }, { v: 'samboer', l: 'Samboer' }, { v: 'enslig', l: 'Enslig' }], '', 'Sivilstand')}</div>
       <div class="row2">${R.enslig ? textField('Navn', 'nameM', i.nameM) : textField('Navn, mann', 'nameM', i.nameM) + textField('Navn, kvinne', 'nameK', i.nameK)}</div>
       ${R.samb ? `<div class="field"><span class="flabel">Har felles barn</span>${seg('sambFelles', !!i.sambFelles, yn, '', 'Har felles barn')}</div>
@@ -396,6 +413,15 @@
 
   function assetsCard() {
     const nm = R.nm;
+    const brutto = R.est.brutto || 1;
+    const byType = {};
+    input.assets.forEach(a => {
+      const t = a.type || 'annet';
+      byType[t] = (byType[t] || 0) + (+a.value || 0);
+    });
+    const typeSegs = TYPES.map(t => ({ c: TYPE_COLOR[t[0]] || '#8091AC', v: byType[t[0]] || 0, l: t[1] })).filter(s => s.v > 0.5);
+    const liqSum = input.assets.filter(E.isLiquid).reduce((s, a) => s + (+a.value || 0), 0);
+    const mix = stackBar(typeSegs, { key: 'asset-viz', label: 'Sammensetning av bruttoformue', short: true });
     const rows = input.assets.map((a, ix) => {
       let meta = `<select class="sel sm" data-bind="assets.${ix}.type" aria-label="Type">${TYPES.map(t => `<option value="${t[0]}"${a.type === t[0] ? ' selected' : ''}>${t[1]}</option>`).join('')}</select>`;
       if (R.gift) {
@@ -406,16 +432,18 @@
         meta += `<span class="pctin">Eierandel ${esc(nm.M)} <input class="inp sm" type="text" inputmode="decimal" data-bind="assets.${ix}.pctM" data-type="dec" value="${F.dec(p, 1)}" aria-label="Eierandel ${esc(nm.M)} i prosent"> % · ${esc(nm.K)} ${F.pct(100 - p)}</span>`;
       }
       const liq = E.isLiquid(a);
+      const ac = TYPE_COLOR[a.type] || TYPE_COLOR.annet;
+      const share = Math.max(0, Math.min(100, ((+a.value || 0) / brutto) * 100));
       meta += `<button type="button" class="chip ${liq ? 'on liq' : ''}" aria-pressed="${liq}" data-action="toggleLiq" data-ix="${ix}" title="${liq ? 'Trekkes fra forsikringsbehovet. Kan slås av.' : 'Merk som likvid – kan selges i oppgjøret.'}">
         <i class="bx ${liq ? 'bx-check' : 'bx-plus'}" aria-hidden="true"></i>${liq ? 'Likvid – kan brukes i oppgjøret' : 'Merk som likvid'}</button>`;
-      return `<div class="asset${liq ? ' is-liq' : ''}" data-key="asset-${esc(a.id)}">
+      return `<div class="asset${liq ? ' is-liq' : ''}" data-key="asset-${esc(a.id)}" style="--ac:${ac}">
         <div class="asset-top"><input class="inp" type="text" data-bind="assets.${ix}.name" data-type="text" value="${esc(a.name)}" aria-label="Navn på eiendel" autocomplete="off">
         ${moneyInput(`assets.${ix}.value`, a.value, `Verdi, ${a.name}`)}
         <button type="button" class="icon-btn ghost del" data-action="delAsset" data-id="${esc(a.id)}" aria-label="Slett ${esc(a.name)}"><i class="bx bx-trash" aria-hidden="true"></i></button></div>
+        <div class="asset-share" aria-hidden="true"><i style="width:${share.toFixed(1)}%"></i></div>
         <div class="asset-meta">${meta}</div></div>`;
     }).join('');
-    const liqSum = input.assets.filter(E.isLiquid).reduce((s, a) => s + (+a.value || 0), 0);
-    const body = `<div class="assets">${rows}</div>
+    const body = `${mix}<div class="assets">${rows}</div>
       <div class="sumline"><button type="button" class="btn btn-tertiary btn-sm" data-action="addAsset"><i class="bx bx-plus" aria-hidden="true"></i>Legg til eiendel</button>
       <div class="tot"><span>Sum bruttoformue</span>${kr(R.est.brutto)}</div></div>
       ${liqSum > 0 ? `<p class="help">Likvide eiendeler ${kr(liqSum)} (bank, fond og investeringsselskap) kan selges i oppgjøret – for eksempel for å betale arv til barn – og reduserer behovet for livsforsikring.</p>` : ''}`;
@@ -426,7 +454,11 @@
     const e = R.est, nm = R.nm;
     const fields = R.enslig ? moneyField('Gjeld', 'debtF', input.debtF)
       : moneyField('Felles gjeld', 'debtF', input.debtF, R.samb ? 'Fordeles likt mellom samboerne.' : '') + moneyField(`Gjeld ${nm.M}`, 'debtM', input.debtM) + moneyField(`Gjeld ${nm.K}`, 'debtK', input.debtK);
-    const body = `<div class="row2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${fields}</div>
+    const viz = stackBar([
+      { c: '#264472', v: Math.max(0, e.netto), l: 'Nettoformue' },
+      { c: '#F04438', v: e.debtTot, l: 'Gjeld' }
+    ], { key: 'debt-viz', label: 'Bruttoformue fordelt på netto og gjeld', short: true });
+    const body = `${viz}<div class="row2" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">${fields}</div>
       <div class="sumbox"><div class="r"><span>Bruttoformue</span><b>${kr(e.brutto)}</b></div><div class="r"><span>− Total gjeld</span><b>${kr(e.debtTot)}</b></div>
       <div class="r total"><span>Nettoformue</span><b>${kr(e.netto)}</b></div></div>`;
     return ccard('gjeld', 'bx-credit-card', 'Gjeld', `Nettoformue ${kr(e.netto)}`, body);
@@ -436,9 +468,23 @@
     const nm = R.nm;
     let body;
     if (R.gift) {
-      body = `<div class="row2">${moneyField(`Særeie ${nm.M}`, 'saereieM', input.saereieM, 'Avstemmes mot eiendeler merket særeie')}${moneyField(`Særeie ${nm.K}`, 'saereieK', input.saereieK, 'Avstemmes mot eiendeler merket særeie')}
-        ${moneyField(`Skjevdeling ${nm.M}`, 'skjevM', input.skjevM, 'Innført i ekteskapet, arv eller gave')}${moneyField(`Skjevdeling ${nm.K}`, 'skjevK', input.skjevK, 'Innført i ekteskapet, arv eller gave')}</div>
-        ${banners([...R.est.warnings, ...R.est.notes], 'est-notes')}`;
+      const e = R.est;
+      const sM = e.s && e.s.M != null ? e.s.M : (+input.saereieM || 0);
+      const sK = e.s && e.s.K != null ? e.s.K : (+input.saereieK || 0);
+      const fell = Math.max(0, (e.fellesGross != null ? e.fellesGross : e.brutto) - (e.fromF ? e.fromF.M + e.fromF.K : 0));
+      const viz = stackBar([
+        { c: '#8091AC', v: fell, l: 'Felleseie' },
+        { c: '#002359', v: sM, l: `Særeie ${nm.M}` },
+        { c: '#3B7EE3', v: sK, l: `Særeie ${nm.K}` }
+      ], { key: 'saereie-viz', label: 'Eierskap av bruttoformue', short: true });
+      body = `${viz}<div class="own-grid">
+        <div class="own-col own-m"><div class="own-h">${esc(nm.M)}</div>
+          ${moneyField(`Særeie ${nm.M}`, 'saereieM', input.saereieM, 'Avstemmes mot eiendeler merket særeie')}
+          ${moneyField(`Skjevdeling ${nm.M}`, 'skjevM', input.skjevM, 'Innført i ekteskapet, arv eller gave')}</div>
+        <div class="own-col own-k"><div class="own-h">${esc(nm.K)}</div>
+          ${moneyField(`Særeie ${nm.K}`, 'saereieK', input.saereieK, 'Avstemmes mot eiendeler merket særeie')}
+          ${moneyField(`Skjevdeling ${nm.K}`, 'skjevK', input.skjevK, 'Innført i ekteskapet, arv eller gave')}</div>
+      </div>${banners([...R.est.warnings, ...R.est.notes], 'est-notes')}`;
     } else {
       body = `<p class="help">Særeie og skjevdeling gjelder bare for ektefeller${R.samb ? '. Samboere eier hver sine eiendeler etter eierandel, og det er ingen ekteskapsdeling.' : '.'}</p>`;
     }
@@ -447,15 +493,21 @@
 
   function insCard() {
     const people = R.enslig ? ['M'] : ['M', 'K'];
+    const gMax = Math.max(60, ...people.map(X => +input['insG' + X] || 0));
     const body = people.map(X => {
       const g = +input['insG' + X] || 0;
       let ben = input['ben' + X] || 'spouse';
       if (R.enslig && ben === 'spouse') ben = 'barn';
       const opts = [...(R.enslig ? [] : [{ v: 'spouse', l: R.samb ? 'Samboer' : 'Ektefelle' }]), { v: 'barn', l: 'Barn' }, { v: 'annen', l: 'Navngitt annen' }];
       if (!R.enslig) opts[0].l = 'Ektefelle/samboer';
-      return `<div class="ins-person" data-key="ins-${X}"><span class="flabel">Livsforsikring på ${esc(R.nm[X])}</span>
+      const w = Math.max(0, Math.min(100, g / gMax * 100));
+      const ac = X === 'M' ? '#002359' : '#3B7EE3';
+      return `<div class="ins-person" data-key="ins-${X}">
+        <div class="ins-head"><span class="fam-av" style="background:${ac}">${esc(ini(R.nm[X]))}</span>
+          <div><span class="flabel">Livsforsikring på ${esc(R.nm[X])}</span><div class="ins-eq">${kr(g * R.G)}</div></div></div>
+        <div class="ins-gbar" role="img" aria-label="${esc(F.nf(g, 1) + ' G')}"><i style="width:${w.toFixed(1)}%"></i></div>
         <div class="ins-row"><div class="fld"><input class="inp" type="text" inputmode="decimal" data-bind="insG${X}" data-type="dec" value="${F.dec(g, 2)}" aria-label="Livsforsikring ${esc(R.nm[X])} i G" autocomplete="off"><span class="suf" aria-hidden="true">G</span></div>
-        <span class="ins-eq">= ${kr(g * R.G)}</span></div>
+        <span class="help">${esc(F.nf(g, 1))} G · utenfor dødsboet</span></div>
         <div class="field"><span class="flabel">Begunstiget</span>${seg('ben' + X, ben, opts, 'compact', 'Begunstiget')}</div>
         ${ben === 'annen' ? textField('Navn på begunstiget', 'benName' + X, input['benName' + X] || '') : ''}</div>`;
     }).join('');
@@ -463,7 +515,17 @@
   }
 
   function paramCard() {
+    const ladder = [
+      ['#84AEED', '1 G', R.G, 1],
+      ['#3B7EE3', '4 G · minstearv med barn', R.g4, 4],
+      ['#0A5EDC', '6 G · minstearv uten barn', R.g6, 6],
+      ['#002359', '15 G · pliktdelstak', R.g15, 15]
+    ];
+    const gviz = `<div class="g-ladder" data-key="g-viz" role="img" aria-label="Grunnbeløp og lovfestede beløp">${ladder.map(r =>
+      `<div class="g-row"><span class="g-l">${esc(r[1])}</span><span class="g-trk"><i style="width:${(r[3] / 15 * 100).toFixed(1)}%;background:${r[0]}"></i></span><b>${kr(r[2])}</b></div>`
+    ).join('')}</div>`;
     const body = `${moneyField('Grunnbeløp (1 G)', 'G', input.G, '1 G er 136 549 kr per 1. mai 2026. Grunnbeløpet justeres 1. mai hvert år.')}
+      ${gviz}
       <div class="locked">
         <div class="r"><i class="bx bx-lock-alt" aria-hidden="true"></i>Pliktdelsfaktor<b>15 G = ${kr(R.g15)}</b></div>
         <div class="r"><i class="bx bx-lock-alt" aria-hidden="true"></i>Ektefelles minstearv med livsarvinger<b>4 G = ${kr(R.g4)}</b></div>
@@ -751,11 +813,11 @@
       values: R.alts.map(a => !a.available ? null : id === 'S' ? a.survivor.total : a.flows.filter(f => f.to === id && f.from !== 'B').reduce((s, f) => s + f.value, 0))
     })).filter(g => g.values.some(v => v != null && v > 0.5));
     const leg = ['1 Lov', '2 Uskifte', '3 Minimum', '4 Testament'].map((l, i) => `<span>${sq(C.CMP_COLORS[i])}${l}</span>`).join('');
-    const usk = R.alts[1].available ? `<p class="help" style="margin-top:16px">I uskifte vises det som utbetales nå. Resten av arven etter ${esc(R.nA)} fordeles når ${esc(R.nB)} dør.</p>` : '';
+    const usk = R.alts[1].available ? `<p class="help" style="margin-top:10px">I uskifte vises det som utbetales nå. Resten av arven etter ${esc(R.nA)} fordeles når ${esc(R.nB)} dør.</p>` : '';
     return `<div class="panel-h" data-key="ch"><div><h2 class="h2">Sammenligning</h2><p class="muted">Hva hver mottaker sitter igjen med i de fire alternativene. For gjenlevende inkluderes egen formue og livsforsikring.</p></div>
       <button type="button" class="btn btn-primary btn-md" data-action="openSummary"><i class="bx bx-file" aria-hidden="true"></i>Oppsummering</button></div>
       <div class="cmp-cards" data-key="cards">${cards}</div>
-      <section class="card" data-key="per"><div class="card-h"><h3 class="h3">Per mottaker</h3><div class="legend">${leg}</div></div>
+      <section class="card cmp-per" data-key="per"><div class="card-h"><h3 class="h3">Per mottaker</h3><div class="legend">${leg}</div></div>
       ${groups.length ? C.compare(groups) : '<p class="help">Ingen fordeling å vise.</p>'}${usk}</section>`;
   }
 
@@ -890,6 +952,221 @@
     </div></div>`;
   }
 
+  /* ================= PDF-rapport ================= */
+  function printKpis() {
+    const e = R.est;
+    const cells = [
+      ['#264472', 'Nettoformue', e.netto, `Brutto ${kr(e.brutto)} − gjeld ${kr(e.debtTot)}`],
+      ['#405A82', R.enslig ? 'Dødsbo' : `${gen(R.nA)} dødsbo`, R.bo, R.insolvent ? 'Boet er insolvent' : R.gift ? 'Halvdel felleseie + særeie' : R.samb ? 'Egne eierandeler fratrukket gjeld' : 'Hele nettoformuen']
+    ];
+    if (!R.enslig) cells.push(['#A0AEC4', `${R.nB} – egen formue`, R.bOwn, 'Ikke arv']);
+    cells.push(['hatch', 'Livsforsikring', R.insA, `${F.nf(R.insGA, 1)} G · utenfor dødsboet`]);
+    return `<div class="kpi">${cells.map(c => `<div class="kpi-c"><div class="kpi-l">${sq(c[0])}${esc(c[1])}</div><div class="kpi-v">${esc(kr(c[2]))}</div><div class="kpi-s">${esc(c[3])}</div></div>`).join('')}</div>`;
+  }
+  function printFacts() {
+    const i = input, e = R.est;
+    const civil = { gift: 'Gift', samboer: 'Samboer', enslig: 'Enslig' }[i.civil];
+    const typeL = t => (TYPES.find(x => x[0] === t) || [t, t])[1];
+    const ownL = o => o === 'sM' ? `Særeie ${R.nm.M}` : o === 'sK' ? `Særeie ${R.nm.K}` : 'Felleseie';
+    const benL = (X, b) => b === 'barn' ? 'Barn' : b === 'annen' ? (i['benName' + X] || 'Navngitt annen') : (R.samb ? 'Samboer' : 'Ektefelle');
+    const kids = R.enslig
+      ? `${R.felles.length} barn`
+      : `${R.felles.length} felles barn · ${(i.nSkM | 0) + (i.nSkK | 0)} særkullsbarn`;
+    const famRows = [
+      ['Sivilstand', civil],
+      ...(R.enslig ? [['Navn', R.nm.M]] : [['Mann', R.nm.M], ['Kvinne', R.nm.K]]),
+      ...(R.enslig ? [] : [['Hvem dør først', R.nA]]),
+      ['Barn', kids],
+      ['Foreldrelinje', i.parentsAlive !== false ? 'Lever' : 'Ingen']
+    ];
+    const assets = i.assets.filter(a => (+a.value || 0) > 0);
+    const liq = assets.filter(E.isLiquid).reduce((s, a) => s + (+a.value || 0), 0);
+    const assetRows = assets.map(a => `<tr><td>${esc(a.name)}</td><td>${esc(typeL(a.type))}</td>
+      <td>${R.gift ? esc(ownL(a.own || 'felles')) : (R.samb ? `${esc(R.nm.M)} ${F.pct(Math.min(100, Math.max(0, +a.pctM || 0)))}` : '–')}</td>
+      <td>${E.isLiquid(a) ? 'Likvid' : '–'}</td><td class="r">${kr(a.value)}</td></tr>`).join('');
+    const people = R.enslig ? ['M'] : ['M', 'K'];
+    const insRows = people.map(X => {
+      const g = +i['insG' + X] || 0;
+      return `<tr><td>${esc(R.nm[X])}</td><td>${esc(F.nf(g, 2))} G</td><td class="r">${kr(g * R.G)}</td><td>${esc(benL(X, i['ben' + X] || (R.enslig ? 'barn' : 'spouse')))}</td></tr>`;
+    }).join('');
+    return `<section class="preport-ch">
+      <div class="preport-kicker">Forutsetninger</div>
+      <h2 class="h2">Familie og formue</h2>
+      <p class="lead">Grunnlaget alle fire alternativer er regnet ut fra.</p>
+      <div class="preport-grid">
+        <section class="card"><h3 class="h3">Familie</h3>
+          <table class="t"><tbody>${famRows.map(r => `<tr><td>${esc(r[0])}</td><td class="r">${esc(r[1])}</td></tr>`).join('')}</tbody></table></section>
+        <section class="card"><h3 class="h3">Økonomi</h3>
+          <div class="sumbox"><div class="r"><span>Bruttoformue</span><b>${kr(e.brutto)}</b></div>
+            <div class="r"><span>− Gjeld</span><b>${kr(e.debtTot)}</b></div>
+            <div class="r total"><span>Nettoformue</span><b>${kr(e.netto)}</b></div>
+            <div class="r"><span>Likvide eiendeler</span><b>${kr(liq)}</b></div>
+            <div class="r"><span>1 G</span><b>${kr(R.G)}</b></div></div></section>
+      </div>
+      <section class="card"><h3 class="h3">Eiendeler</h3>
+        <table class="t"><thead><tr><th>Eiendel</th><th>Type</th><th>Eierskap</th><th>Likvid</th><th class="r">Verdi</th></tr></thead>
+        <tbody>${assetRows}<tr class="sum"><td colspan="4">Sum</td><td class="r">${kr(e.brutto)}</td></tr></tbody></table></section>
+      ${R.gift ? `<section class="card"><h3 class="h3">Særeie og skjevdeling</h3>
+        <table class="t"><tbody>
+          <tr><td>Særeie ${esc(R.nm.M)}</td><td class="r">${kr(i.saereieM)}</td></tr>
+          <tr><td>Særeie ${esc(R.nm.K)}</td><td class="r">${kr(i.saereieK)}</td></tr>
+          <tr><td>Skjevdeling ${esc(R.nm.M)}</td><td class="r">${kr(i.skjevM)}</td></tr>
+          <tr><td>Skjevdeling ${esc(R.nm.K)}</td><td class="r">${kr(i.skjevK)}</td></tr>
+        </tbody></table></section>` : ''}
+      <section class="card"><h3 class="h3">Livsforsikring · utenfor dødsboet</h3>
+        <table class="t"><thead><tr><th>Forsikret</th><th>Sum</th><th class="r">Beløp</th><th>Begunstiget</th></tr></thead>
+        <tbody>${insRows}</tbody></table></section>
+    </section>`;
+  }
+  function printHoldings(a) {
+    if (R.enslig || !a.available || !a.balance) return '';
+    const b = a.balance, holdColor = C.HOLD_COLOR || {};
+    const row = (it, neg) => `<div class="hold-row ${neg ? 'neg' : ''}"><span class="sq ${it.type === 'ins' ? 'hatch-ins' : ''}"${it.type === 'ins' ? '' : ` style="background:${holdColor[it.type] || '#8091AC'}"`}></span>
+      <span class="n">${esc(it.name)}</span><b>${neg ? '− ' : ''}${kr(it.value)}</b></div>`;
+    return `<section class="card hold-card"><div class="card-h"><h3 class="h3">Hva ${esc(R.nB)} sitter igjen med</h3></div>
+      <div class="hold-body">
+        <div class="hold-viz"><div class="hold-kpi"><span class="flabel">${esc(R.nB)} netto etter oppgjøret</span><div class="need-big">${kr(b.net)}</div></div>
+          ${C.holdings(b, `${R.nB} etter oppgjøret, netto ${kr(b.net)}`)}</div>
+        <div class="hold-list">${b.keep.map(it => row(it, false)).join('')}
+          ${b.liab.length ? `<div class="flabel" style="margin-top:12px">Forpliktelser</div>${b.liab.map(it => row(it, true)).join('')}` : ''}
+          <div class="hold-row total"><span class="n">Netto til ${esc(R.nB)}</span><b>${kr(b.net)}</b></div></div>
+      </div></section>`;
+  }
+  function printNeed(a) {
+    const n = a.need;
+    if (!n) return '';
+    const extra = Math.max(0, n.S - n.Kn);
+    const names = list(n.keepNames);
+    const status = !n.keepIds.length ? banner('info', 'Ingen søkt beholdt. Behovet følger kontantbehovet alene.')
+      : n.canStay ? banner('success', `${R.nB} kan bli boende i ${names} (${kr(n.V)}).`)
+        : banner('error', `Uten mer forsikring mangler ${R.nB} ${kr(n.S)} for å bli boende i ${names}.`);
+    return `<section class="card"><div class="card-h"><h3 class="h3">Forsikringsbehov ved ${esc(gen(R.nA))} død</h3></div>
+      <div class="preport-need">
+        <div><span class="flabel">Udekket behov på ${esc(gen(R.nA))} liv</span><div class="need-big">${kr(n.gap)}</div>
+          <div class="help">${esc(F.g(n.gapG))} · samlet behov ${kr(n.need)}</div></div>
+        <div class="oppst">
+          <div class="r"><span>Kontantbehov</span><b>${kr(n.K)}</b></div>
+          <div class="r"><span>− Likvide midler</span><b>${kr(Math.min(n.Lq, n.K))}</b></div>
+          <div class="r sub"><span>Etter salg</span><b>${kr(n.Kn)}</b></div>
+          ${extra > 0.5 ? `<div class="r"><span>+ Tillegg for bolig</span><b>${kr(extra)}</b></div>` : ''}
+          <div class="r"><span>− Eksisterende forsikring</span><b>${kr(n.existing)}</b></div>
+          <div class="r sub"><span>= Udekket</span><b>${kr(n.gap)}</b></div>
+        </div>
+      </div>${status}</section>`;
+  }
+  function printAssumptions(a) {
+    if (a.id === 'uskifte') {
+      const bits = [];
+      if (R.gift) bits.push(input.uskSaereieInn ? `Særeie inngår i uskifte (${kr(R.est.sA)}).` : 'Særeie inngår ikke i uskifte.');
+      if (R.skA.length) R.skA.forEach(h => bits.push((input.consent || {})[h.id] ? `${h.name} samtykker til uskifte.` : `${h.name} samtykker ikke – får arv nå.`));
+      else bits.push('Ingen samtykke nødvendig.');
+      return `<p class="preport-note">${esc(bits.join(' '))}</p>`;
+    }
+    if (a.id === 'minimum') {
+      const v = input.friTo === 'max' ? 'O' : (input.friTo || 'O');
+      const to = v === 'S' ? R.nB : v === 'barna' ? 'barna likt' : 'annen mottaker';
+      return `<p class="preport-note">Pliktdel og minstearv er låst. Fri del går til ${esc(to)}.</p>`;
+    }
+    if (a.id === 'testament' && R.t4) {
+      const t4 = R.t4;
+      const ids = [...t4.ids, ...(t4.eff.P > 0.5 ? ['P'] : [])];
+      const name = id => id === 'S' ? `${R.nB} (gjenlevende)` : (R.nodes[id] || {}).name || id;
+      const rows = ids.map(id => {
+        const p = typeof t4.pctOf === 'function' ? t4.pctOf(id) : 0;
+        return `<tr><td>${esc(name(id))}</td><td class="r">${F.pct(p || 0, 1)}</td><td class="r">${kr(t4.fin[id] || 0)}</td></tr>`;
+      }).join('');
+      const note = input.testamentNote ? `<p class="help" style="margin-top:10px">${esc(input.testamentNote)}</p>` : '';
+      return `<section class="card"><h3 class="h3">Testamentets fordeling</h3>
+        <table class="t"><thead><tr><th>Mottaker</th><th class="r">Andel</th><th class="r">Gjennomførbart</th></tr></thead>
+        <tbody>${rows}</tbody></table>${note}</section>`;
+    }
+    return '';
+  }
+  function printAlt(a) {
+    let h = `<section class="preport-ch">
+      <div class="preport-kicker">Alternativ ${a.num}</div>
+      <div class="alt-top"><div><h2 class="h2">${esc(a.title)}</h2><p class="lead">${esc(a.lead)}</p></div>
+        ${a.available && !R.enslig ? survCard(a) : ''}</div>`;
+    if (!a.available) return h + `<div class="card na-card"><span class="icirc"><i class="bx bx-block" aria-hidden="true"></i></span>
+      <div><h3 class="h3">Ikke tilgjengelig</h3><p class="muted">${esc(a.reason)}</p></div></div></section>`;
+    h += printAssumptions(a);
+    h += sankeyCard(a);
+    if (a.id === 'uskifte') h += timelineCard(a);
+    h += printNeed(a);
+    h += `<div class="cols2">${distTable(a)}${explainCard(a)}</div>`;
+    h += waterfallCard(a);
+    h += printHoldings(a);
+    return h + '</section>';
+  }
+  function printCompare() {
+    const cards = R.alts.map(a => `<div class="cmp-card">
+      <span class="eyebrow">ALTERNATIV ${a.num}</span><span class="t">${esc(a.title)}</span>
+      <span class="l">${esc(R.enslig ? 'Dødsbo fordelt' : `${R.nB} totalt`)}</span>
+      ${a.available ? `<span class="v">${kr(R.enslig ? R.bo : a.survivor.total)}</span>` : '<span class="v na">Ikke tilgjengelig</span>'}
+    </div>`).join('');
+    const ids = [...(R.enslig ? [] : ['S']), ...R.heirs.map(h => h.id), 'P', 'O', 'X'];
+    const subOf = id => id === 'S' ? 'Gjenlevende · inkl. egen formue og livsforsikring' : id === 'P' ? 'Foreldrelinjen' : id === 'O' ? 'Testamentarisk mottaker' : id === 'X' ? 'Begunstiget livsforsikring' : R.nodes[id].kind === 'felles' ? (R.enslig ? 'Barn' : 'Felles barn') : 'Særkullsbarn';
+    const groups = ids.map(id => ({
+      key: id, name: recName(id), sub: subOf(id), color: (R.nodes[id] || {}).color || '#405A82',
+      values: R.alts.map(a => !a.available ? null : id === 'S' ? a.survivor.total : a.flows.filter(f => f.to === id && f.from !== 'B').reduce((s, f) => s + f.value, 0))
+    })).filter(g => g.values.some(v => v != null && v > 0.5));
+    const leg = ['1 Lov', '2 Uskifte', '3 Minimum', '4 Testament'].map((l, i) => `<span>${sq(C.CMP_COLORS[i])}${l}</span>`).join('');
+    return `<section class="preport-ch preport-last">
+      <div class="preport-kicker">Sammenligning</div>
+      <h2 class="h2">Hva hver mottaker sitter igjen med</h2>
+      <div class="cmp-cards">${cards}</div>
+      <section class="card cmp-per"><div class="card-h"><h3 class="h3">Per mottaker</h3><div class="legend">${leg}</div></div>
+        ${groups.length ? C.compare(groups) : '<p class="help">Ingen fordeling å vise.</p>'}</section>
+      <footer class="preport-end">Forenklet modell til illustrasjon. Ikke juridisk rådgivning. Arveoppgjør bør gjennomgås med advokat. 1 G = ${kr(R.G)} per 1. mai 2026.</footer>
+    </section>`;
+  }
+  function printCover() {
+    const dato = new Date().toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' });
+    const scen = R.enslig ? `${R.nm.M} dør. 1 G = ${kr(R.G)}.` : `${R.nA} dør først, ${R.nB} er gjenlevende. 1 G = ${kr(R.G)}.`;
+    const alts = R.alts.map((a, i) => `<div class="fp-alt ${a.available ? '' : 'na'}">
+      <span class="fp-num">${a.num}</span><span class="fp-alt-t">${esc(a.title)}</span>
+      <span class="fp-alt-d">${esc(ALT_DESC[i])}</span>
+      ${a.available
+        ? `<span class="fp-alt-f"><span class="l">${esc(R.enslig ? 'Dødsbo' : `${R.nB} totalt`)}</span><span class="v">${kr(R.enslig ? R.bo : a.survivor.total)}</span></span>`
+        : `<span class="fp-alt-f"><span class="l">Ikke tilgjengelig</span><span class="na-r">${esc(a.reason)}</span></span>`}
+    </div>`).join('');
+    return `<header class="preport-cover">
+      <div class="preport-brand"><img src="assets/spwm-logo.svg" alt="Söderberg &amp; Partners Wealth Management"><span>Rapport · ${esc(dato)}</span></div>
+      <section class="fp-hero">
+        <div class="fp-hero-txt">
+          <div class="eyebrow fp-eb">ARVEOPPGJØR</div>
+          <h1 class="fp-title">Arveoppgjør for ektefeller og samboere</h1>
+          <p class="fp-lead">${esc(scen)} Beregningene følger arveloven av 2019. Forenklet modell til illustrasjon – ikke juridisk rådgivning.</p>
+        </div>
+        ${heroArt()}
+      </section>
+      ${printKpis()}
+      <div class="fp-alts">${alts}</div>
+    </header>`;
+  }
+  function printReport() {
+    return printCover() + printFacts() + R.alts.map(printAlt).join('') + printCompare();
+  }
+  function startPrint() {
+    const prev = ui.showCalc;
+    ui.showCalc = true;
+    let box = document.getElementById('print-report');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'print-report';
+      box.className = 'preport';
+      document.body.appendChild(box);
+    }
+    box.innerHTML = printReport();
+    const finish = () => {
+      ui.showCalc = prev;
+      box.innerHTML = '';
+      window.removeEventListener('afterprint', finish);
+    };
+    window.addEventListener('afterprint', finish);
+    setTimeout(() => window.print(), 80);
+  }
+
   /* ================= Hendelser ================= */
   function setTab(id, focus) {
     if (!TAB_IDS.includes(id)) return;
@@ -963,7 +1240,7 @@
       render();
     },
     reset: () => { input = fresh(); render(); },
-    print: () => window.print(),
+    print: () => startPrint(),
     validate: () => { ui.modal = true; render(); const c = document.getElementById('modal-close'); if (c) c.focus(); },
     closeModal: (el, ev) => { if (ev.target === el || el.dataset.close) { ui.modal = false; render(); } },
     openSummary: () => { ui.summary = true; ui.copied = false; render(); const b = document.getElementById('sum-copy'); if (b) b.focus(); },

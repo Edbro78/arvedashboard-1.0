@@ -4,16 +4,16 @@
   const { esc, kr } = F;
   const r2 = v => Math.round(v * 100) / 100;
 
-  const PATTERNS = `<defs>
-    <pattern id="pat-ins" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+  const patterns = pfx => `<defs>
+    <pattern id="${pfx}pat-ins" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
       <rect width="6" height="6" fill="#D1FADF"></rect><rect width="2.5" height="6" fill="#079455"></rect></pattern>
-    <pattern id="pat-fri" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+    <pattern id="${pfx}pat-fri" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
       <rect width="6" height="6" fill="#CCD3DE"></rect><rect width="2.5" height="6" fill="#002359"></rect></pattern>
   </defs>`;
 
-  const pathAttr = d => `d="${d}" style="d:path('${d}')"`;
+  const pathAttr = d => `d="${d}"`;
   const bandEl = (key, d, fill, o, title, tip) =>
-    `<path class="band" data-key="${esc(key)}" d="${d}" style="d:path('${d}');--o:${o}" fill="${fill}" data-tip-title="${esc(title)}" data-tip="${esc(tip)}"></path>`;
+    `<path class="band" data-key="${esc(key)}" d="${d}" fill="${fill}" fill-opacity="${o}" style="--o:${o}" data-tip-title="${esc(title)}" data-tip="${esc(tip)}"></path>`;
   const rectPath = (x, y, w, h) => `M${r2(x)},${r2(y)} h${r2(w)} v${r2(h)} h${r2(-w)} Z`;
   const bandPath = (x0, y0, x1, y1, w) => {
     const xm = r2((x0 + x1) / 2);
@@ -25,7 +25,8 @@
    * Sankey: Nettoformue → (Livsforsikring | B egen formue | A dødsbo) → mottakere.
    * R = resultat fra compute(), alt = ett alternativ. Alt avledes fra alt.flows.
    */
-  function sankey(R, alt) {
+  function sankey(R, alt, prefix) {
+    const pfx = prefix ? String(prefix).replace(/[^\w-]/g, '') + '-' : '';
     const flows = alt.flows.filter(f => f.value > 0.5).map((f, i) => Object.assign({ i }, f));
     if (!flows.length) return '';
     const nodes = R.nodes;
@@ -60,12 +61,12 @@
 
     const recName = id => id === 'S' ? `${R.nB} (gjenlevende)` : (nodes[id] || {}).name || id;
     const midInfo = {
-      I: { name: 'Livsforsikring', sub: 'utenfor dødsboet', fill: 'url(#pat-ins)' },
+      I: { name: 'Livsforsikring', sub: 'utenfor dødsboet', fill: `url(#${pfx}pat-ins)` },
       B: { name: `${R.nB} – egen formue`, sub: 'ikke arv', fill: '#A0AEC4' },
       A: { name: `${F.gen(R.nA)} dødsbo`, sub: 'arv', fill: '#405A82' }
     };
     if (R.enslig) midInfo.A.name = 'Dødsbo';
-    const bandFill = f => f.hatch === 'ins' || f.from === 'I' ? ['url(#pat-ins)', .75] : f.hatch === 'fri' ? ['url(#pat-fri)', .75]
+    const bandFill = f => f.hatch === 'ins' || f.from === 'I' ? [`url(#${pfx}pat-ins)`, .75] : f.hatch === 'fri' ? [`url(#${pfx}pat-fri)`, .75]
       : f.from === 'B' ? ['#A0AEC4', .45] : [(nodes[f.to] || {}).color || '#405A82', .28];
 
     const bands = [], nodeEls = [], labels = [], rows = [];
@@ -124,7 +125,7 @@
         <text class="t-name" y="-3">${esc(recName(id))}</text><text class="t-sub" y="15">${esc(sub)}</text></g>`);
     });
     const label = `Sankey-diagram over formuens vei i alternativet ${alt.title}. Se tabellen under for tallene.`;
-    return `<svg class="sankey" viewBox="0 0 1000 ${H}" role="img" aria-label="${esc(label)}" data-key="sankey">${PATTERNS}
+    return `<svg class="sankey" viewBox="0 0 1000 ${H}" role="img" aria-label="${esc(label)}" data-key="sankey">${patterns(pfx)}
       <g data-key="bands">${bands.join('')}</g><g data-key="nodes">${nodeEls.join('')}</g><g data-key="labels">${labels.join('')}</g></svg>
       <table class="sr-only"><caption>${esc(label)}</caption><thead><tr><th>Fra</th><th>Til</th><th>Beløp</th></tr></thead><tbody>${rows.join('')}</tbody></table>`;
   }
@@ -141,15 +142,16 @@
       max = Math.max(max, hi);
       return Object.assign({ lo, hi }, c);
     });
-    const k = max > 0 ? 240 / max : 0;
+    const INNER = 200, HEAD = 22;
+    const k = max > 0 ? INNER / max : 0;
     const n = segs.length;
-    return `<div class="scroll-x"><div class="wf-grid" role="img" aria-label="${esc(ariaLabel)}" style="grid-template-columns:repeat(${n},minmax(64px,1fr));min-width:${n * 64}px">
+    return `<div class="scroll-x"><div class="wf-grid" role="img" aria-label="${esc(ariaLabel)}" style="grid-template-columns:repeat(${n},minmax(72px,1fr));min-width:${n * 72}px">
       ${segs.map(s => {
         const bg = s.hatch === 'fri' ? 'var(--hatch-fri)' : s.hatch === 'ins' ? 'var(--hatch-ins)' : s.color;
         const v = (s.kind === 'step' && s.neg ? '−' : '') + F.short(s.value);
         return `<div class="wf-col" data-key="wf-${esc(s.key)}" title="${esc(s.label + ': ' + kr(s.value))}">
-          <div class="wf-plot"><div class="wf-bar" style="bottom:${r2(Math.max(0, s.lo) * k)}px;height:${r2(Math.max(1, (s.hi - Math.max(0, s.lo)) * k))}px;background:${bg}"></div>
-          <div class="wf-val" style="bottom:${r2(s.hi * k + 4)}px">${esc(v)}</div></div>
+          <div class="wf-plot" style="height:${INNER + HEAD}px"><div class="wf-bar" style="bottom:${r2(Math.max(0, s.lo) * k)}px;height:${r2(Math.max(1, (s.hi - Math.max(0, s.lo)) * k))}px;background:${bg}">
+          <span class="wf-val">${esc(v)}</span></div></div>
           <div class="wf-lbl">${esc(s.label)}</div></div>`;
       }).join('')}
     </div></div>`;
