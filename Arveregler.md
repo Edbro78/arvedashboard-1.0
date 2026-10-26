@@ -34,9 +34,11 @@ Formatering: `25 000 000 kr`. Ikke-brytende mellomrom som tusenskille, komma som
 
 ### 1.1 Inndata
 - Eiendeler `{navn, type, verdi, eierskap}` der eierskap ∈ `felleseie | særeie mann | særeie kone`
+- Type `pensjon` (Privat pensjon): eies alltid av mann eller kone, aldri felleseie. Inngår ikke i likedelingen (ekteskapsloven § 61). Avdødes pensjon følger eieren inn i dødsboet og går ikke inn i uskiftet. Gjenlevendes pensjon er egen formue.
 - Gjeld: `felles`, `mann`, `kone` (kr)
 - Særeie oppgitt som sum: `saereieM`, `saereieK`
 - Skjevdelingskrav: `skjevM`, `skjevK` (ekteskapsloven § 59: verdier ført inn i ekteskapet, eller arvet/fått i gave)
+- Livsforsikring: standard **15 G** på hver (mann og kone). Kontrolltallene i § 12 bruker 50 G / 20 G.
 
 ### 1.2 Avstemming av særeie
 For hver ektefelle X:
@@ -56,8 +58,8 @@ felleseieNetto = fellesBrutto − fraFelles[M] − fraFelles[K] − gjeld.felles
 likedeling    = felleseieNetto − skjev[M] − skjev[K]
 halvdel       = likedeling / 2
 andel[X]      = halvdel + skjev[X] − gjeld[X]      // egen gjeld hefter ved egen andel
-dødsbo        = andel[A] + særeie[A]
-egenFormueB   = andel[B] + særeie[B]               // IKKE arv
+dødsbo        = andel[A] + særeie[A] + pensjon[A]
+egenFormueB   = andel[B] + særeie[B] + pensjon[B]  // IKKE arv
 ```
 Kontroll: `brutto − total gjeld − andel[B] − særeie[B] = dødsbo`.
 
@@ -181,7 +183,7 @@ Gjenlevende totalt = egenFormueB + L.ektefelle + forsikring til B
 ## 7. Alternativ 2 – Uskifte (arveloven kap. 4)
 
 ### 7.1 Hvem kan sitte i uskifte
-- **Ektefelle:** ja. Uskiftet omfatter **felleseiet**.
+- **Ektefelle:** ja. Uskiftet omfatter **felleseiet**. Privat pensjon går aldri inn i uskiftet (ekteskapsloven § 61).
 - **Samboer med felles barn:** ja, men bare for felles bolig med innbo, fritidsbolig og bil/båt til felles bruk. Resten av A's bo skiftes nå etter loven.
 - **Samboer uten felles barn:** nei. Alternativet er deaktivert: "Samboere uten felles barn har ikke rett til å sitte i uskifte (arveloven kap. 4)."
 - **Enslig:** nei: "Uskifte forutsetter en gjenlevende ektefelle eller samboer."

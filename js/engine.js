@@ -18,13 +18,20 @@
     ],
     debtF: 19000000, debtM: 0, debtK: 0,
     saereieM: 0, saereieK: 3000000, skjevM: 0, skjevK: 0,
-    insGM: 50, insGK: 20, benM: 'spouse', benK: 'spouse', benNameM: '', benNameK: '',
+    insGM: 15, insGK: 15, benM: 'spouse', benK: 'spouse', benNameM: '', benNameK: '',
     G: 136549,
     uskSaereieInn: false, consent: {}, friTo: 'O', parentsAlive: true,
     insNeed: { lov: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, liqPct: 100, useExisting: true }, uskifte: { keep: null, debtPct: 100, kidsPct: 100, buffer: 500000, liqPct: 100, useExisting: true } },
     testament: {}, testamentNote: ''
   };
   const LIQUID = ['bank', 'fond', 'selskap'];
+  function isPensjon(a) { return !!(a && a.type === 'pensjon'); }
+  function pensjonOwner(a) {
+    if (!a) return 'M';
+    if (a.own === 'sK' || a.own === 'K') return 'K';
+    if (a.own === 'sM' || a.own === 'M') return 'M';
+    return (+a.pctM || 0) < 50 ? 'K' : 'M';
+  }
   function inferLiquidType(name) {
     const n = (name || '').trim();
     if (/investeringsselskap|holding/i.test(n)) return 'selskap';
@@ -33,7 +40,7 @@
     return null;
   }
   function isLiquid(a) {
-    if (!a) return false;
+    if (!a || isPensjon(a)) return false;
     if (a.liquid === true) return true;
     if (a.liquid === false) return false;
     return LIQUID.includes(a.type) || !!inferLiquidType(a.name);
@@ -55,10 +62,17 @@
     const debtTot = debt.F + debt.M + debt.K;
     const netto = brutto - debtTot;
     const notes = [], warnings = [];
-    const e = { brutto, debt, debtTot, netto, notes, warnings, share: { M: 0, K: 0 }, s: { M: 0, K: 0 }, elig: { M: 0, K: 0 } };
+    const pension = { M: 0, K: 0 };
+    const e = { brutto, debt, debtTot, netto, notes, warnings, share: { M: 0, K: 0 }, s: { M: 0, K: 0 }, elig: { M: 0, K: 0 }, pension };
     if (inp.civil === 'gift') {
       const marked = { M: 0, K: 0 }; let fellesGross = 0;
-      assets.forEach(a => { if (a.own === 'sM') marked.M += +a.value || 0; else if (a.own === 'sK') marked.K += +a.value || 0; else fellesGross += +a.value || 0; });
+      assets.forEach(a => {
+        const v = +a.value || 0;
+        if (isPensjon(a)) pension[pensjonOwner(a)] += v;
+        else if (a.own === 'sM') marked.M += v;
+        else if (a.own === 'sK') marked.K += v;
+        else fellesGross += v;
+      });
       const fromF = { M: 0, K: 0 };
       ['M', 'K'].forEach(X => {
         const given = +inp['saereie' + X] || 0;
@@ -74,13 +88,14 @@
       const half = lik / 2;
       e.share = { M: half + skj.M - debt.M, K: half + skj.K - debt.K };
       Object.assign(e, { marked, fellesGross, fromF, fellesNet, skj, lik, half });
-      e.bo = e.share[A] + e.s[A];
-      e.bOwn = e.share[B] + e.s[B];
+      e.bo = e.share[A] + e.s[A] + pension[A];
+      e.bOwn = e.share[B] + e.s[B] + pension[B];
     } else if (inp.civil === 'samboer') {
       const own = { M: 0, K: 0 };
       assets.forEach(a => {
-        const pm = Math.min(100, Math.max(0, +a.pctM || 0)) / 100;
+        const pm = isPensjon(a) ? (pensjonOwner(a) === 'M' ? 1 : 0) : Math.min(100, Math.max(0, +a.pctM || 0)) / 100;
         own.M += (+a.value || 0) * pm; own.K += (+a.value || 0) * (1 - pm);
+        if (isPensjon(a)) pension[pensjonOwner(a)] += +a.value || 0;
         if (['hus', 'fritid', 'bil', 'innbo'].includes(a.type)) { e.elig.M += (+a.value || 0) * pm; e.elig.K += (+a.value || 0) * (1 - pm); }
       });
       e.share = { M: own.M - debt.F / 2 - debt.M, K: own.K - debt.F / 2 - debt.K };
@@ -152,7 +167,10 @@
     const L = lov(bo, c);
     const plRaw = heirs.length ? (2 / 3) * Math.max(0, bo) / heirs.length : 0;
     const pl = heirs.reduce((o, h) => (o[h.id] = Math.min(plRaw, g15), o), {});
-    const ownCalc = gift ? `Halvdel av felleseie (${kr(est.share[B])}) + særeie (${kr(est.sB)}). Ikke arv.` : `Egne eierandeler fratrukket gjeld. Ikke arv.`;
+    const pA = (est.pension && est.pension[A]) || 0, pB = (est.pension && est.pension[B]) || 0;
+    const ownCalc = gift
+      ? `Halvdel av felleseie (${kr(est.share[B])}) + særeie (${kr(est.sB)})${pB > 0.5 ? ` + privat pensjon (${kr(pB)})` : ''}. Ikke arv.`
+      : `Egne eierandeler fratrukket gjeld. Ikke arv.`;
 
     function insFlows() {
       if (insA <= 0) return [];
@@ -169,8 +187,9 @@
       if (gift) {
         ex.push({ law: 'Ekteskapsloven kap. 12', text: `Felleseie netto utgjør ${kr(est.fellesNet)}${(est.skj.M + est.skj.K) ? `. Etter skjevdeling (${kr(est.skj.M + est.skj.K)})` : ''}, og likedelingsmassen på ${kr(est.lik)} deles likt: ${kr(est.half)} til hver.` });
         if (est.skj[A] > 0) ex.push({ law: 'Ekteskapsloven § 59', text: `${nA} skjevdeler ${kr(est.skj[A])} før likedeling.` });
-        ex.push({ law: 'Dødsbo', text: `${gen(nA)} dødsbo er halvdelen av felleseiet (${kr(est.share[A])}) pluss særeie (${kr(est.sA)}) = ${kr(bo)}.` });
-        ex.push({ law: 'Ikke arv', text: `${nB} beholder sin halvdel og sitt særeie, til sammen ${kr(bOwn)}. Dette er ${gen(nB)} egen formue.` });
+        ex.push({ law: 'Dødsbo', text: `${gen(nA)} dødsbo er halvdelen av felleseiet (${kr(est.share[A])}) pluss særeie (${kr(est.sA)})${pA > 0.5 ? ` og privat pensjon (${kr(pA)})` : ''} = ${kr(bo)}.` });
+        ex.push({ law: 'Ikke arv', text: `${nB} beholder sin halvdel og sitt særeie${pB > 0.5 ? ` og sin private pensjon` : ''}, til sammen ${kr(bOwn)}. Dette er ${gen(nB)} egen formue.` });
+        if (pA > 0.5) ex.push({ law: 'Ekteskapsloven § 61', text: `Privat pensjon inngår ikke i likedelingen. ${gen(nA)} pensjon (${kr(pA)}) følger ${nA} og skiftes med dødsboet.` });
       } else if (samb) {
         ex.push({ law: 'Samboere', text: `Samboere har ingen ekteskapsdeling. ${gen(nA)} dødsbo er ${gen(nA)} eierandeler fratrukket gjeld: ${kr(bo)}.` });
       } else ex.push({ law: 'Dødsbo', text: `Dødsboet er nettoformuen: ${kr(bo)}.` });
@@ -261,6 +280,7 @@
       a2.explain = [...baseExplain()];
       a2.explain.push({ law: 'Arveloven kap. 4', text: gift ? `${nB} kan sitte i uskifte med felleseiet. Uskifteboet utgjør ${kr(usk)}.` : `Som samboer med felles barn kan ${nB} bare ta felles bolig, fritidsbolig, bil og innbo i uskifte. Uskifteboet utgjør ${kr(usk)}.` });
       if (gift && est.sA > 0) a2.explain.push({ law: 'Arveloven kap. 4', text: inn ? `${gen(nA)} særeie (${kr(est.sA)}) inngår i uskiftet etter samtykke/ektepakt.` : `${gen(nA)} særeie (${kr(est.sA)}) går ikke inn i uskiftet og skiftes nå: ${nB} ${kr(Lo.spouse)}${heirs.length ? `, hvert barn ${kr(Lo.each)}` : ''}.` });
+      if (pA > 0.5) a2.explain.push({ law: 'Ekteskapsloven § 61', text: `${gen(nA)} private pensjon (${kr(pA)}) inngår ikke i likedelingen og går ikke inn i uskiftet. Den skiftes nå med dødsboet.` });
       if (felles.length) a2.explain.push({ law: 'Arveloven kap. 4', text: `Felles barn kan ikke nekte uskifte.` });
       payouts.forEach(p => a2.explain.push({ law: 'Arveloven kap. 4', text: `${p.h.name} samtykker ikke til uskifte og får ${kr(p.v)} utbetalt nå.` }));
       if (!skA.length && gift) a2.explain.push({ law: 'Arveloven kap. 4', text: `${nA} har ingen særkullsbarn, så uskifte krever ikke samtykke.` });
@@ -467,8 +487,8 @@
   function validate() {
     const rows = [];
     const chk = (label, exp, act) => rows.push({ label, exp, act, ok: Math.abs(exp - act) < 1 });
-    const K = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'K', friTo: 'S', G: 124028 }));
-    const M = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'M', friTo: 'S', G: 124028 }));
+    const K = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'K', friTo: 'S', G: 124028, insGM: 50, insGK: 20 }));
+    const M = compute(Object.assign(clone(DEFAULT_INPUT), { firstDies: 'M', friTo: 'S', G: 124028, insGM: 50, insGK: 20 }));
     const flow = (r, alt, to, sub) => sum(r.alts[alt].flows.filter(f => f.from === 'A' && f.to === to && (sub === undefined || (f.sub || '') === sub || (sub === 'fri' && f.hatch === 'fri'))).map(f => f.value));
     chk('4 G', 496112, K.g4); chk('15 G', 1860420, K.g15);
     chk('Forsikring mann (50 G)', 6201400, M.insA); chk('Forsikring kone (20 G)', 2480560, K.insA);
@@ -497,5 +517,5 @@
     return rows;
   }
 
-  window.ArveEngine = { DEFAULT_INPUT, compute, lov, estate, validate, defaultTestament, fmt, kr, pct, gen, clone, PAL, LIQUID, isLiquid, inferLiquidType };
+  window.ArveEngine = { DEFAULT_INPUT, compute, lov, estate, validate, defaultTestament, fmt, kr, pct, gen, clone, PAL, LIQUID, isLiquid, inferLiquidType, isPensjon, pensjonOwner };
 })();

@@ -174,7 +174,7 @@
 
   const HOLD_COLOR = {
     hus: '#002359', fritid: '#264472', bil: '#405A82', innbo: '#667085',
-    selskap: '#3B7EE3', fond: '#84AEED', bank: '#B5CFF5', annet: '#8091AC',
+    selskap: '#3B7EE3', fond: '#84AEED', bank: '#B5CFF5', pensjon: '#0E7090', annet: '#8091AC',
     ins: 'var(--hatch-ins)', debt: '#F04438', kids: '#9747FF'
   };
   function holdFill(type) { return HOLD_COLOR[type] || HOLD_COLOR.annet; }
